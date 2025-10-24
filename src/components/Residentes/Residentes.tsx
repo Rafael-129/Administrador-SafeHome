@@ -1,21 +1,8 @@
 import { useState } from 'react'
 import './Residentes.css'
+import type { Residente, ComponentProps } from '../../types'
 
-interface Residente {
-  id: number
-  nombre: string
-  departamento: string
-  dni: string
-  telefono: string
-  estado: 'Activo' | 'Inactivo'
-  registro: string
-}
-
-interface ResidentesProps {
-  onBack: () => void
-}
-
-export default function Residentes({ }: ResidentesProps) {
+export default function Residentes({}: ComponentProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [estadoFilter, setEstadoFilter] = useState('Todos los estados')
   const [pisoFilter, setPisoFilter] = useState('Todos los Pisos')

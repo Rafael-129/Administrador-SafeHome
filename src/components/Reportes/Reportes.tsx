@@ -1,27 +1,8 @@
 import { useState } from 'react'
 import './Reportes.css'
+import type { ReporteRapido, ReporteHistorial, ComponentProps } from '../../types'
 
-interface ReporteRapido {
-  id: string
-  titulo: string
-  descripcion: string
-  color: string
-  icon: string
-  ultimaActualizacion: string
-}
-
-interface ReporteHistorial {
-  id: number
-  nombre: string
-  fecha: string
-  estado: 'Completado' | 'En Proceso' | 'Error'
-}
-
-interface ReportesProps {
-  onBack: () => void
-}
-
-export default function Reportes({ }: ReportesProps) {
+export default function Reportes({}: ComponentProps) {
   const [tituloReporte, setTituloReporte] = useState('Análisis de seguridad semanal')
   const [fechaDesde, setFechaDesde] = useState('25/09/2025')
   const [fechaHasta, setFechaHasta] = useState('30/09/2025')

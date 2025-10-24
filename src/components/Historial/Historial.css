@@ -85,6 +85,7 @@
 .filters-container {
   display: flex;
   gap: 12px;
+  align-items: center;
 }
 
 .filter-select {
@@ -97,7 +98,7 @@
   cursor: pointer;
   transition: all 0.3s ease;
   outline: none;
-  min-width: 140px;
+  min-width: 150px;
 }
 
 .filter-select:focus {
@@ -108,11 +109,12 @@
 
 .more-filters-btn {
   background: #f3f4f6;
-  border: 2px solid #e5e7eb;
+  color: #374151;
+  border: 1px solid #d1d5db;
   border-radius: 12px;
   padding: 12px 16px;
   font-size: 14px;
-  color: #374151;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.3s ease;
   white-space: nowrap;
@@ -120,7 +122,7 @@
 
 .more-filters-btn:hover {
   background: #e5e7eb;
-  border-color: #d1d5db;
+  transform: translateY(-1px);
 }
 
 .export-btn {
@@ -128,7 +130,7 @@
   color: white;
   border: none;
   border-radius: 12px;
-  padding: 12px 20px;
+  padding: 12px 24px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -159,34 +161,43 @@
 .tab-button {
   flex: 1;
   padding: 16px 24px;
+  background: none;
   border: none;
-  background: transparent;
-  color: #6b7280;
   font-size: 14px;
   font-weight: 500;
+  color: #6b7280;
   cursor: pointer;
   transition: all 0.3s ease;
-  border-bottom: 3px solid transparent;
+  position: relative;
 }
 
 .tab-button:hover {
-  background: rgba(102, 126, 234, 0.05);
   color: #374151;
+  background: rgba(102, 126, 234, 0.05);
 }
 
 .tab-button.active {
-  background: white;
   color: #667eea;
-  border-bottom-color: #667eea;
+  background: white;
   font-weight: 600;
 }
 
+.tab-button.active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #667eea;
+}
+
 .tab-content {
-  background: white;
+  padding: 0;
 }
 
 .content-header {
-  padding: 20px 24px;
+  padding: 24px 24px 16px 24px;
   border-bottom: 1px solid #f3f4f6;
 }
 
@@ -256,7 +267,7 @@
 /* Badges */
 .tipo-badge {
   display: inline-block;
-  padding: 4px 10px;
+  padding: 4px 8px;
   border-radius: 12px;
   font-size: 11px;
   font-weight: 600;
@@ -270,20 +281,20 @@
 }
 
 .tipo-badge.visitante {
-  background: #dbeafe;
-  color: #1e40af;
+  background: #d1fae5;
+  color: #065f46;
 }
 
 .tipo-badge.no-identificado {
-  background: #fef3c7;
-  color: #92400e;
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .status-badge {
   display: inline-block;
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -300,13 +311,13 @@
 }
 
 .status-badge.resuelto {
-  background: #e0e7ff;
-  color: #3730a3;
+  background: #d1fae5;
+  color: #065f46;
 }
 
 .status-badge.completado {
-  background: #d1fae5;
-  color: #065f46;
+  background: #e0e7ff;
+  color: #3730a3;
 }
 
 /* No Results */
@@ -344,7 +355,8 @@
   
   .filter-select {
     flex: 1;
-    min-width: 120px;
+    min-width: auto;
+    margin-bottom: 8px;
   }
   
   .tabs-header {
@@ -352,13 +364,7 @@
   }
   
   .tab-button {
-    border-bottom: none;
-    border-left: 3px solid transparent;
-  }
-  
-  .tab-button.active {
-    border-left-color: #667eea;
-    border-bottom: none;
+    flex: none;
   }
 }
 
@@ -385,20 +391,12 @@
     width: 100%;
   }
   
-  .table-container {
-    overflow-x: auto;
-  }
-  
   .historial-table {
     min-width: 800px;
   }
   
   .content-header {
-    padding: 16px 20px;
-  }
-  
-  .content-header h3 {
-    font-size: 16px;
+    padding: 20px;
   }
 }
 
@@ -410,12 +408,6 @@
   
   .tab-button {
     min-width: 150px;
-    border-bottom: 3px solid transparent;
-    border-left: none;
-  }
-  
-  .tab-button.active {
-    border-bottom-color: #667eea;
-    border-left: none;
+    white-space: nowrap;
   }
 }

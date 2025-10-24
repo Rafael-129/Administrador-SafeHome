@@ -1,16 +1,6 @@
 import { useState } from 'react'
 import './Historial.css'
-
-interface RegistroAcceso {
-  id: number
-  persona: string
-  tipo: 'Residente' | 'Visitante' | 'No Identificado'
-  accion: string
-  hora: string
-  fecha: string
-  ubicacion: string
-  estado: 'Exitoso' | 'Denegado'
-}
+import type { RegistroAcceso, ComponentProps } from '../../types'
 
 interface IncidenteEvento {
   id: number
@@ -22,11 +12,7 @@ interface IncidenteEvento {
   estado: string
 }
 
-interface HistorialProps {
-  onBack: () => void
-}
-
-export default function Historial({ }: HistorialProps) {
+export default function Historial({}: ComponentProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [tipoFilter, setTipoFilter] = useState('Todos los tipos')
   const [fechaFilter, setFechaFilter] = useState('Hoy')

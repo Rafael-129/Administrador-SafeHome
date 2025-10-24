@@ -1,24 +1,11 @@
 import { useState } from 'react'
 import './Camaras.css'
+import type { Camara, ComponentProps } from '../../types'
 
-interface Camara {
-  id: number
-  nombre: string
-  ubicacion: string
-  resolucion: string
-  fps: string
-  estado: 'Online' | 'Offline'
-}
-
-interface CamarasProps {
-  onBack: () => void
-}
-
-export default function Camaras({ }: CamarasProps) {
+export default function Camaras({}: ComponentProps) {
   const [selectedCamera, setSelectedCamera] = useState(1)
   const [isRecording, setIsRecording] = useState(false)
-  const [volume, setVolume] = useState(50)
-  const [zoom, setZoom] = useState(1)
+  const [zoom] = useState(1)
 
   const camaras: Camara[] = [
     {

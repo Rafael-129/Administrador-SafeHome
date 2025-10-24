@@ -1,21 +1,8 @@
 import { useState } from 'react'
 import './Visitantes.css'
+import type { Visitante, ComponentProps } from '../../types'
 
-interface Visitante {
-  id: number
-  nombre: string
-  visitaA: string
-  horaEntrada: string
-  tiempoRestante: string
-  estado: 'Activo' | 'Vencido'
-  registro: string
-}
-
-interface VisitantesProps {
-  onBack: () => void
-}
-
-export default function Visitantes({ }: VisitantesProps) {
+export default function Visitantes({}: ComponentProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [nombreCompleto, setNombreCompleto] = useState('')
   const [dni, setDni] = useState('')

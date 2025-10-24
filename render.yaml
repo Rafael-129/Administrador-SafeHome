@@ -1,0 +1,11 @@
+# Configuración para Render - Dashboard SafeHome
+services:
+  - type: web
+    name: dashboard-safehome
+    env: static
+    buildCommand: npm run build
+    staticPublishPath: ./dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

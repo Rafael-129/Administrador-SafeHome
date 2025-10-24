@@ -8,6 +8,7 @@ import Visitantes from '../Visitantes/Visitantes'
 import Historial from '../Historial/Historial'
 import Camaras from '../Camaras/Camaras'
 import Reportes from '../Reportes/Reportes'
+import Configuracion from '../Configuracion/Configuracion'
 
 export default function Dashboard({ onLogout }: DashboardProps) {
   const [activeSection, setActiveSection] = useState('dashboard')
@@ -27,6 +28,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         {activeSection === 'historial' && <Historial onBack={() => setActiveSection('dashboard')} />}
         {activeSection === 'camaras' && <Camaras onBack={() => setActiveSection('dashboard')} />}
         {activeSection === 'reportes' && <Reportes onBack={() => setActiveSection('dashboard')} />}
+        {activeSection === 'configuracion' && <Configuracion onBack={() => setActiveSection('dashboard')} />}
       </div>
     </div>
   )

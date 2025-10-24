@@ -3,6 +3,8 @@ import './Dashboard.css'
 import Residentes from './Residentes'
 import Visitantes from './Visitantes'
 import Historial from './Historial'
+import Camaras from './Camaras'
+import Reportes from './Reportes'
 
 interface DashboardProps {
   onLogout: () => void
@@ -102,6 +104,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           <Visitantes onBack={() => setActiveSection('dashboard')} />
         ) : activeSection === 'historial' ? (
           <Historial onBack={() => setActiveSection('dashboard')} />
+        ) : activeSection === 'camaras' ? (
+          <Camaras onBack={() => setActiveSection('dashboard')} />
+        ) : activeSection === 'reportes' ? (
+          <Reportes onBack={() => setActiveSection('dashboard')} />
         ) : (
           <>
             {/* Header */}

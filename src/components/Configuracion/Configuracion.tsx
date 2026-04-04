@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './Configuracion.css'
 
 interface ConfiguracionProps {
@@ -6,6 +6,7 @@ interface ConfiguracionProps {
 }
 
 export default function Configuracion({ }: ConfiguracionProps) {
+  const STORAGE_KEY = 'safehome-dashboard-config'
   const [activeTab, setActiveTab] = useState('perfil')
   const [nombre, setNombre] = useState('Admin SafeHome')
   const [email, setEmail] = useState('admin@safehome.com')
@@ -18,6 +19,8 @@ export default function Configuracion({ }: ConfiguracionProps) {
   const [tiempoSesion, setTiempoSesion] = useState('8')
   const [intervaloCamaras, setIntervaloCamaras] = useState('30')
   const [retencionLogs, setRetencionLogs] = useState('90')
+  const [feedback, setFeedback] = useState<string | null>(null)
+  const importFileRef = useRef<HTMLInputElement | null>(null)
 
   const tabs = [
     { id: 'perfil', name: 'Perfil', icon: '👤' },
@@ -27,26 +30,110 @@ export default function Configuracion({ }: ConfiguracionProps) {
     { id: 'respaldo', name: 'Respaldo', icon: '💾' }
   ]
 
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (!saved) {
+      return
+    }
+
+    try {
+      const parsed = JSON.parse(saved)
+      setNombre(parsed.nombre ?? 'Admin SafeHome')
+      setEmail(parsed.email ?? 'admin@safehome.com')
+      setTelefono(parsed.telefono ?? '+51 999 888 777')
+      setIdioma(parsed.idioma ?? 'Español')
+      setTema(parsed.tema ?? 'Claro')
+      setNotificacionesEmail(parsed.notificacionesEmail ?? true)
+      setNotificacionesMovil(parsed.notificacionesMovil ?? true)
+      setAutenticacionDosFactor(parsed.autenticacionDosFactor ?? false)
+      setTiempoSesion(parsed.tiempoSesion ?? '8')
+      setIntervaloCamaras(parsed.intervaloCamaras ?? '30')
+      setRetencionLogs(parsed.retencionLogs ?? '90')
+    } catch {
+      setFeedback('No se pudo cargar la configuración guardada.')
+    }
+  }, [])
+
+  const buildConfigData = () => ({
+    nombre,
+    email,
+    telefono,
+    idioma,
+    tema,
+    notificacionesEmail,
+    notificacionesMovil,
+    autenticacionDosFactor,
+    tiempoSesion,
+    intervaloCamaras,
+    retencionLogs,
+  })
+
   const handleGuardarCambios = () => {
-    console.log('Guardando configuración...')
-    alert('Configuración guardada exitosamente')
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(buildConfigData()))
+    setFeedback('Configuración guardada localmente.')
   }
 
   const handleRestaurarDefecto = () => {
     if (confirm('¿Estás seguro de restaurar la configuración por defecto?')) {
-      console.log('Restaurando configuración por defecto...')
-      alert('Configuración restaurada')
+      setNombre('Admin SafeHome')
+      setEmail('admin@safehome.com')
+      setTelefono('+51 999 888 777')
+      setIdioma('Español')
+      setTema('Claro')
+      setNotificacionesEmail(true)
+      setNotificacionesMovil(true)
+      setAutenticacionDosFactor(false)
+      setTiempoSesion('8')
+      setIntervaloCamaras('30')
+      setRetencionLogs('90')
+      localStorage.removeItem(STORAGE_KEY)
+      setFeedback('Configuración restaurada a valores por defecto.')
     }
   }
 
   const handleExportarConfiguracion = () => {
-    console.log('Exportando configuración...')
-    alert('Configuración exportada exitosamente')
+    const payload = JSON.stringify(buildConfigData(), null, 2)
+    const blob = new Blob([payload], { type: 'application/json;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'safehome-dashboard-config.json'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    setFeedback('Configuración exportada correctamente.')
   }
 
   const handleImportarConfiguracion = () => {
-    console.log('Importando configuración...')
-    alert('Función de importar configuración')
+    importFileRef.current?.click()
+  }
+
+  const handleFileImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) {
+      return
+    }
+
+    try {
+      const text = await file.text()
+      const parsed = JSON.parse(text)
+      setNombre(parsed.nombre ?? nombre)
+      setEmail(parsed.email ?? email)
+      setTelefono(parsed.telefono ?? telefono)
+      setIdioma(parsed.idioma ?? idioma)
+      setTema(parsed.tema ?? tema)
+      setNotificacionesEmail(parsed.notificacionesEmail ?? notificacionesEmail)
+      setNotificacionesMovil(parsed.notificacionesMovil ?? notificacionesMovil)
+      setAutenticacionDosFactor(parsed.autenticacionDosFactor ?? autenticacionDosFactor)
+      setTiempoSesion(parsed.tiempoSesion ?? tiempoSesion)
+      setIntervaloCamaras(parsed.intervaloCamaras ?? intervaloCamaras)
+      setRetencionLogs(parsed.retencionLogs ?? retencionLogs)
+      setFeedback('Configuración importada. Guarda para persistirla.')
+    } catch {
+      setFeedback('El archivo no es válido. Usa un JSON exportado del sistema.')
+    }
+    event.target.value = ''
   }
 
   const renderTabContent = () => {
@@ -318,6 +405,13 @@ export default function Configuracion({ }: ConfiguracionProps) {
             <h3>Respaldo y Restauración</h3>
             
             <div className="backup-options">
+              <input
+                ref={importFileRef}
+                type="file"
+                accept="application/json"
+                onChange={handleFileImport}
+                style={{ display: 'none' }}
+              />
               <div className="backup-card">
                 <div className="backup-icon">💾</div>
                 <div className="backup-info">
@@ -410,6 +504,17 @@ export default function Configuracion({ }: ConfiguracionProps) {
         {/* Content Area */}
         <div className="config-content">
           {renderTabContent()}
+
+          {feedback && (
+            <div className="backup-history" style={{ marginBottom: '1rem' }}>
+              <h3>Estado</h3>
+              <div className="backup-list">
+                <div className="backup-item">
+                  <span className="backup-date">{feedback}</span>
+                </div>
+              </div>
+            </div>
+          )}
           
           {/* Action Buttons */}
           <div className="config-actions">

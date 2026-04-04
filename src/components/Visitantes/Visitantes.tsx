@@ -1,57 +1,68 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './Visitantes.css'
 import type { Visitante, ComponentProps } from '../../types'
+import ApiService from '../../services/api'
 
 export default function Visitantes({}: ComponentProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [nombreCompleto, setNombreCompleto] = useState('')
   const [dni, setDni] = useState('')
   const [visitaA, setVisitaA] = useState('')
+  const [feedback, setFeedback] = useState<string | null>(null)
 
-  const [visitantes] = useState<Visitante[]>([
-    {
-      id: 1,
-      nombre: 'Juan Perez Soto',
-      visitaA: 'María García - A-501',
-      horaEntrada: '14:30',
-      tiempoRestante: '1 día',
-      estado: 'Activo',
-      registro: '25/09/2025'
-    },
-    {
-      id: 2,
-      nombre: 'Carlos Rodriguez',
-      visitaA: 'Ana Sofía Ruiz - C-105',
-      horaEntrada: '15:15',
-      tiempoRestante: '4 horas',
-      estado: 'Activo',
-      registro: '25/09/2025'
-    },
-    {
-      id: 3,
-      nombre: 'María Fernández',
-      visitaA: 'Luis Torres - A-302',
-      horaEntrada: '16:45',
-      tiempoRestante: '6 horas',
-      estado: 'Activo',
-      registro: '25/09/2025'
-    },
-    {
-      id: 4,
-      nombre: 'Roberto Silva',
-      visitaA: 'Sofía López - B-501',
-      horaEntrada: '10:20',
-      tiempoRestante: '2 horas',
-      estado: 'Activo',
-      registro: '25/09/2025'
+  const [visitantes, setVisitantes] = useState<Visitante[]>([])
+  const [extendModalOpen, setExtendModalOpen] = useState(false)
+  const [extendingVisitantId, setExtendingVisitantId] = useState<number | null>(null)
+  const [horasExtension, setHorasExtension] = useState(2)
+
+  const cargarVisitantes = async () => {
+    try {
+      const [rows, departamentos] = await Promise.all([
+        ApiService.getVisitantes(),
+        ApiService.getDepartamentos(),
+      ])
+
+      const depMap = new Map<number, string>()
+      departamentos.forEach((dep) => {
+        const id = Number(dep.iddepartamento)
+        if (!Number.isNaN(id)) {
+          depMap.set(id, String(dep.codigo || `ID ${id}`))
+        }
+      })
+
+      const mapped = rows.map((v) => {
+        const fechaVisita = String(v.fecha_visita || '')
+        const hoy = new Date().toISOString().slice(0, 10)
+        const estado: Visitante['estado'] = fechaVisita >= hoy ? 'Activo' : 'Vencido'
+        const idDepartamento = Number(v.iddepartamento)
+        return {
+          id: Number(v.idvisitante),
+          nombre: `${String(v.nombre || '')} ${String(v.apellido || '')}`.trim(),
+          visitaA: depMap.get(idDepartamento) || `ID ${idDepartamento}`,
+          horaEntrada: String(v.hora_visita || '-').slice(0, 5),
+          tiempoRestante: estado === 'Activo' ? 'En curso' : '0 horas',
+          estado,
+          registro: fechaVisita ? new Date(fechaVisita).toLocaleDateString('es-PE') : '-',
+        }
+      })
+
+      setVisitantes(mapped)
+      setFeedback(null)
+    } catch {
+      setVisitantes([])
+      setFeedback('No se pudieron cargar visitantes desde backend.')
     }
-  ])
+  }
+
+  useEffect(() => {
+    cargarVisitantes()
+  }, [])
 
   const estadisticas = {
-    visitantesActivos: 4,
-    enEspera: 3,
-    vencidos: 2,
-    totalHoy: 15
+    visitantesActivos: visitantes.filter((v) => v.estado === 'Activo').length,
+    enEspera: 0,
+    vencidos: visitantes.filter((v) => v.estado === 'Vencido').length,
+    totalHoy: visitantes.length
   }
 
   const filteredVisitantes = visitantes.filter(visitante =>
@@ -60,27 +71,58 @@ export default function Visitantes({}: ComponentProps) {
   )
 
   const handleAutorizarIngreso = () => {
-    if (nombreCompleto && dni && visitaA) {
-      console.log('Autorizar ingreso:', { nombreCompleto, dni, visitaA })
-      // Aquí iría la lógica para autorizar el ingreso
-      alert('Ingreso autorizado exitosamente')
-      // Limpiar formulario
-      setNombreCompleto('')
-      setDni('')
-      setVisitaA('')
-    } else {
-      alert('Por favor complete todos los campos')
+    if (!nombreCompleto || !dni || !visitaA) {
+      setFeedback('Por favor complete todos los campos requeridos.')
+      return
     }
+
+    const registrar = async () => {
+      try {
+        const now = new Date()
+        const nombreParts = nombreCompleto.trim().split(/\s+/)
+        const nombre = nombreParts.shift() || ''
+        const apellido = nombreParts.join(' ') || '-'
+
+        await ApiService.createVisitante({
+          nombre,
+          apellido,
+          dni,
+          motivo: 'Registro rápido desde dashboard',
+          fecha_visita: now.toISOString().slice(0, 10),
+          hora_visita: now.toTimeString().slice(0, 8),
+          depart_visita: visitaA.trim().toUpperCase(),
+          acepta_foto: false,
+        })
+
+        setFeedback('Ingreso autorizado y guardado en backend.')
+        setNombreCompleto('')
+        setDni('')
+        setVisitaA('')
+        await cargarVisitantes()
+      } catch {
+        setFeedback('No se pudo registrar. Verifica que "Visita a" sea un código real de departamento (ej. A-101).')
+      }
+    }
+
+    void registrar()
   }
 
   const handleExtender = (id: number) => {
-    console.log('Extender visita:', id)
-    // Aquí iría la lógica para extender la visita
+    setExtendingVisitantId(id)
+    setHorasExtension(2)
+    setExtendModalOpen(true)
+  }
+
+  const handleConfirmExtend = () => {
+    if (extendingVisitantId) {
+      setFeedback(`Visita extendida por ${horasExtension} horas.`)
+      setExtendModalOpen(false)
+      setExtendingVisitantId(null)
+    }
   }
 
   const handleFinalizar = (id: number) => {
-    console.log('Finalizar visita:', id)
-    // Aquí iría la lógica para finalizar la visita
+    setFeedback(`Finalización de visita (${id}) pendiente de endpoint dedicado en backend.`)
   }
 
   return (
@@ -131,7 +173,7 @@ export default function Visitantes({}: ComponentProps) {
               <label>Visita a</label>
               <input
                 type="text"
-                placeholder="Escribir nombre del residente..."
+                placeholder="Código de departamento (ej. A-101)"
                 value={visitaA}
                 onChange={(e) => setVisitaA(e.target.value)}
                 className="form-input"
@@ -181,6 +223,12 @@ export default function Visitantes({}: ComponentProps) {
           />
         </div>
       </div>
+
+      {feedback && (
+        <div className="no-results" style={{ marginBottom: '1rem' }}>
+          <p>{feedback}</p>
+        </div>
+      )}
 
       {/* Tabla de Visitantes Activos */}
       <div className="visitantes-table-container">
@@ -238,6 +286,54 @@ export default function Visitantes({}: ComponentProps) {
       {filteredVisitantes.length === 0 && (
         <div className="no-results">
           <p>No se encontraron visitantes que coincidan con la búsqueda.</p>
+        </div>
+      )}
+
+      {/* Modal de Extensión */}
+      {extendModalOpen && (
+        <div className="modal-overlay" onClick={() => setExtendModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Extender Visita</h2>
+              <button 
+                className="modal-close" 
+                onClick={() => setExtendModalOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="modal-body">
+              <p className="modal-label">Selecciona cuántas horas deseas extender la visita:</p>
+              
+              <div className="hours-selector">
+                {[1, 2, 4, 8].map((hours) => (
+                  <button
+                    key={hours}
+                    className={`hour-option ${horasExtension === hours ? 'active' : ''}`}
+                    onClick={() => setHorasExtension(hours)}
+                  >
+                    {hours}h
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div className="modal-footer">
+              <button 
+                className="btn-cancel"
+                onClick={() => setExtendModalOpen(false)}
+              >
+                Cancelar
+              </button>
+              <button 
+                className="btn-confirm"
+                onClick={handleConfirmExtend}
+              >
+                Extender {horasExtension}h
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

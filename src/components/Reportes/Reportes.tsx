@@ -1,13 +1,23 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './Reportes.css'
 import type { ReporteRapido, ReporteHistorial, ComponentProps } from '../../types'
+import ApiService from '../../services/api'
 
 export default function Reportes({}: ComponentProps) {
   const [tituloReporte, setTituloReporte] = useState('Análisis de seguridad semanal')
-  const [fechaDesde, setFechaDesde] = useState('25/09/2025')
-  const [fechaHasta, setFechaHasta] = useState('30/09/2025')
+  const [fechaDesde, setFechaDesde] = useState('2025-09-25')
+  const [fechaHasta, setFechaHasta] = useState('2025-09-30')
   const [formatoExportacion, setFormatoExportacion] = useState('PDF - Documento')
   const [filtrosAdicionales, setFiltrosAdicionales] = useState('Sin filtros adicionales')
+  const [feedback, setFeedback] = useState<string | null>(null)
+  const [selectedDataTypes, setSelectedDataTypes] = useState<Record<string, boolean>>({
+    accesos: true,
+    visitantes: false,
+    rendimiento: false,
+    residentes: false,
+    incidentes: false,
+    camaras: false,
+  })
 
   const reportesRapidos: ReporteRapido[] = [
     {
@@ -60,14 +70,14 @@ export default function Reportes({}: ComponentProps) {
     }
   ]
 
-  const metricas = {
-    eficienciaDelSistema: 90,
-    precisionDeReconocimiento: 90,
-    accesosEsteMes: 50,
-    tiempoPromedioReconocimiento: '2.1s'
-  }
+  const [metricas, setMetricas] = useState({
+    eficienciaDelSistema: 0,
+    precisionDeReconocimiento: 0,
+    accesosEsteMes: 0,
+    tiempoPromedioReconocimiento: 'N/A'
+  })
 
-  const historialReportes: ReporteHistorial[] = [
+  const [historialReportes, setHistorialReportes] = useState<ReporteHistorial[]>([
     {
       id: 1,
       nombre: 'Reporte Diario',
@@ -86,7 +96,37 @@ export default function Reportes({}: ComponentProps) {
       fecha: '22 Sep 18:45',
       estado: 'Completado'
     }
-  ]
+  ])
+
+  useEffect(() => {
+    const cargarMetricas = async () => {
+      try {
+        const now = new Date()
+        const desde = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
+        const hasta = now.toISOString().slice(0, 10)
+        const stats = await ApiService.getEstadisticas(desde, hasta)
+        const total = Number(stats.totalAccesos || 0)
+        const autorizados = Number(stats.autorizados || 0)
+        const precision = total > 0 ? Math.round((autorizados / total) * 100) : 0
+
+        setMetricas({
+          eficienciaDelSistema: precision,
+          precisionDeReconocimiento: precision,
+          accesosEsteMes: total,
+          tiempoPromedioReconocimiento: total > 0 ? '2.1s' : 'N/A'
+        })
+      } catch {
+        setMetricas({
+          eficienciaDelSistema: 0,
+          precisionDeReconocimiento: 0,
+          accesosEsteMes: 0,
+          tiempoPromedioReconocimiento: 'N/A'
+        })
+      }
+    }
+
+    cargarMetricas()
+  }, [])
 
   const tiposDeData = [
     { id: 'accesos', label: 'Accesos', checked: true },
@@ -97,29 +137,86 @@ export default function Reportes({}: ComponentProps) {
     { id: 'camaras', label: 'Cámaras', checked: false }
   ]
 
+  const descargarArchivo = (nombre: string, contenido: string, mime = 'text/plain;charset=utf-8') => {
+    const blob = new Blob([contenido], { type: mime })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = nombre
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  const agregarHistorial = (nombre: string) => {
+    const fecha = new Date().toLocaleString('es-PE', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+
+    setHistorialReportes((prev) => [
+      {
+        id: Date.now(),
+        nombre,
+        fecha,
+        estado: 'Completado',
+      },
+      ...prev,
+    ])
+  }
+
   const handleGenerarReporte = (tipoReporte: string) => {
-    console.log('Generando reporte:', tipoReporte)
-    alert(`Generando ${tipoReporte}...`)
+    const contenido = `Reporte: ${tipoReporte}\nGenerado: ${new Date().toISOString()}\nEstado: Completado\n`
+    descargarArchivo(`${tipoReporte.replaceAll(' ', '_').toLowerCase()}.txt`, contenido)
+    agregarHistorial(tipoReporte)
+    setFeedback(`${tipoReporte} generado y descargado.`)
   }
 
   const handleGenerarPersonalizado = () => {
-    console.log('Generando reporte personalizado:', {
-      titulo: tituloReporte,
-      fechaDesde,
-      fechaHasta,
-      formato: formatoExportacion
-    })
-    alert('Generando reporte personalizado...')
+    const tiposActivos = Object.entries(selectedDataTypes)
+      .filter(([, checked]) => checked)
+      .map(([key]) => key)
+
+    const contenido = [
+      `Titulo: ${tituloReporte}`,
+      `Desde: ${fechaDesde}`,
+      `Hasta: ${fechaHasta}`,
+      `Formato: ${formatoExportacion}`,
+      `Filtros: ${filtrosAdicionales}`,
+      `Datos incluidos: ${tiposActivos.join(', ') || 'ninguno'}`,
+      `Generado: ${new Date().toISOString()}`,
+    ].join('\n')
+
+    const extension = formatoExportacion.includes('CSV') ? 'csv' : 'txt'
+    const mime = extension === 'csv' ? 'text/csv;charset=utf-8' : 'text/plain;charset=utf-8'
+    descargarArchivo(`reporte_personalizado.${extension}`, contenido, mime)
+    agregarHistorial(tituloReporte)
+    setFeedback('Reporte personalizado generado y descargado.')
   }
 
   const handleDescargarReporte = (id: number) => {
-    console.log('Descargando reporte:', id)
-    alert('Descargando reporte...')
+    const reporte = historialReportes.find((r) => r.id === id)
+    if (!reporte) {
+      setFeedback('No se encontró el reporte para descargar.')
+      return
+    }
+    const contenido = `Reporte: ${reporte.nombre}\nFecha: ${reporte.fecha}\nEstado: ${reporte.estado}\n`
+    descargarArchivo(`historial_${reporte.id}.txt`, contenido)
+    setFeedback('Reporte descargado.')
   }
 
   const handleVerHistorialCompleto = () => {
-    console.log('Ver historial completo')
-    alert('Abriendo historial completo...')
+    setFeedback(`Historial disponible: ${historialReportes.length} reportes.`)
+  }
+
+  const handleTipoDataChange = (tipoId: string, checked: boolean) => {
+    setSelectedDataTypes((prev) => ({
+      ...prev,
+      [tipoId]: checked,
+    }))
   }
 
   return (
@@ -239,13 +336,13 @@ export default function Reportes({}: ComponentProps) {
                 <label>Período</label>
                 <div className="date-inputs">
                   <input
-                    type="text"
+                    type="date"
                     value={fechaDesde}
                     onChange={(e) => setFechaDesde(e.target.value)}
                     className="form-input date-input"
                   />
                   <input
-                    type="text"
+                    type="date"
                     value={fechaHasta}
                     onChange={(e) => setFechaHasta(e.target.value)}
                     className="form-input date-input"
@@ -259,7 +356,11 @@ export default function Reportes({}: ComponentProps) {
               <div className="checkboxes-grid">
                 {tiposDeData.map((tipo) => (
                   <label key={tipo.id} className="checkbox-item">
-                    <input type="checkbox" defaultChecked={tipo.checked} />
+                    <input
+                      type="checkbox"
+                      checked={selectedDataTypes[tipo.id] ?? tipo.checked}
+                      onChange={(e) => handleTipoDataChange(tipo.id, e.target.checked)}
+                    />
                     <span>{tipo.label}</span>
                   </label>
                 ))}
@@ -337,6 +438,18 @@ export default function Reportes({}: ComponentProps) {
           </button>
         </div>
       </div>
+
+      {feedback && (
+        <div className="historial-reportes" style={{ marginTop: '1rem' }}>
+          <div className="section-header">
+            <div className="section-icon">✅</div>
+            <div>
+              <h3>Estado</h3>
+              <p>{feedback}</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

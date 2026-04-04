@@ -1,40 +1,70 @@
+import { useEffect, useState } from 'react'
 import type { ActivityData } from '../../types'
+import ApiService from '../../services/api'
 
-export default function DashboardContent() {
-  const activityData: ActivityData[] = [
-    {
-      id: 1,
-      type: 'ingreso',
-      name: 'Sandra Anchelia - Dpto. xx',
-      description: 'Ingreso exitoso',
-      time: 'hace 3 minutos',
-      color: '#10b981'
-    },
-    {
-      id: 2,
-      type: 'salida',
-      name: 'Rafael García - Dpto. xx',
-      description: 'Salida Registrada',
-      time: 'hace 8 minutos',
-      color: '#8b5cf6'
-    },
-    {
-      id: 3,
-      type: 'sistema',
-      name: 'Sistema actualizado',
-      description: 'Cámara principal reconectada',
-      time: 'hace 15min',
-      color: '#f97316'
-    },
-    {
-      id: 4,
-      type: 'visitante',
-      name: 'Nuevo visitante registrado',
-      description: 'Carlos Mendoza visitó Dpto. 507',
-      time: 'hace 20min',
-      color: '#3b82f6'
+interface DashboardContentProps {
+  onQuickNavigate: (section: 'visitantes' | 'residentes' | 'reportes') => void
+}
+
+export default function DashboardContent({ onQuickNavigate }: DashboardContentProps) {
+  const [activityData, setActivityData] = useState<ActivityData[]>([])
+  const [stats, setStats] = useState({
+    residentesActivos: 0,
+    ingresosHoy: 0,
+    visitantesActivos: 0,
+    camarasOnline: 0,
+  })
+
+  useEffect(() => {
+    const cargarDashboard = async () => {
+      try {
+        const [usuarios, historialHoy, visitantesHoy, escaneosRecientes] = await Promise.all([
+          ApiService.getUsuarios(),
+          ApiService.getHistorialHoy(),
+          ApiService.getVisitantesHoy(),
+          ApiService.getEscaneosRecientes(),
+        ])
+
+        setStats({
+          residentesActivos: usuarios.length,
+          ingresosHoy: historialHoy.length,
+          visitantesActivos: visitantesHoy.length,
+          camarasOnline: escaneosRecientes.length > 0 ? 1 : 0,
+        })
+
+        const mapped = historialHoy.slice(0, 6).map((registro) => {
+          const usuarioInfo = registro.usuario_info as Record<string, unknown> | null
+          const visitanteInfo = registro.visitante_info as Record<string, unknown> | null
+          const persona = usuarioInfo
+            ? `${String(usuarioInfo.nombre || '')} ${String(usuarioInfo.apellido || '')}`.trim()
+            : visitanteInfo
+              ? `${String(visitanteInfo.nombre || '')} ${String(visitanteInfo.apellido || '')}`.trim()
+              : 'Desconocido'
+
+          const permitido = String(registro.estado) === 'Permitido'
+          return {
+            id: Number(registro.idhistorial || Date.now()),
+            type: permitido ? 'ingreso' : 'incidente',
+            name: persona,
+            description: permitido ? 'Acceso autorizado' : 'Acceso denegado',
+            time: String(registro.hora_entrada || '-'),
+            color: permitido ? '#10b981' : '#ef4444',
+          }
+        })
+        setActivityData(mapped)
+      } catch {
+        setStats({
+          residentesActivos: 0,
+          ingresosHoy: 0,
+          visitantesActivos: 0,
+          camarasOnline: 0,
+        })
+        setActivityData([])
+      }
     }
-  ]
+
+    cargarDashboard()
+  }, [])
 
   const getCurrentDate = () => {
     const now = new Date()
@@ -62,25 +92,25 @@ export default function DashboardContent() {
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-indicator green"></div>
-          <div className="stat-number">150</div>
+          <div className="stat-number">{stats.residentesActivos}</div>
           <div className="stat-label">Residentes Activos</div>
         </div>
         
         <div className="stat-card">
           <div className="stat-indicator blue"></div>
-          <div className="stat-number">50</div>
+          <div className="stat-number">{stats.ingresosHoy}</div>
           <div className="stat-label">Ingresos Hoy</div>
         </div>
         
         <div className="stat-card">
           <div className="stat-indicator purple"></div>
-          <div className="stat-number">10</div>
+          <div className="stat-number">{stats.visitantesActivos}</div>
           <div className="stat-label">Visitantes Activos</div>
         </div>
         
         <div className="stat-card">
           <div className="stat-indicator orange"></div>
-          <div className="stat-number">1</div>
+          <div className="stat-number">{stats.camarasOnline}</div>
           <div className="stat-label">Cámaras Online</div>
         </div>
       </div>
@@ -94,6 +124,14 @@ export default function DashboardContent() {
             <button className="see-all-btn">Ver todo</button>
           </div>
           <div className="activity-list">
+            {activityData.length === 0 && (
+              <div className="activity-item">
+                <div className="activity-content">
+                  <div className="activity-title">Sin actividad reciente</div>
+                  <div className="activity-description">No hay registros disponibles desde backend.</div>
+                </div>
+              </div>
+            )}
             {activityData.map((activity) => (
               <div key={activity.id} className="activity-item">
                 <div 
@@ -133,9 +171,9 @@ export default function DashboardContent() {
 
       {/* Action Buttons */}
       <div className="action-buttons">
-        <button className="action-btn primary">Registrar Visitante</button>
-        <button className="action-btn secondary">Buscar Residente</button>
-        <button className="action-btn tertiary">Exportar Reporte</button>
+        <button className="action-btn primary" onClick={() => onQuickNavigate('visitantes')}>Registrar Visitante</button>
+        <button className="action-btn secondary" onClick={() => onQuickNavigate('residentes')}>Buscar Residente</button>
+        <button className="action-btn tertiary" onClick={() => onQuickNavigate('reportes')}>Exportar Reporte</button>
       </div>
     </>
   )

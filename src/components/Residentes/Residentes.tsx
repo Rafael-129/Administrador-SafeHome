@@ -1,41 +1,57 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './Residentes.css'
 import type { Residente, ComponentProps } from '../../types'
+import ApiService from '../../services/api'
 
 export default function Residentes({}: ComponentProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [estadoFilter, setEstadoFilter] = useState('Todos los estados')
   const [pisoFilter, setPisoFilter] = useState('Todos los Pisos')
+  const [selectedResidenteId, setSelectedResidenteId] = useState<number | null>(null)
+  const [editingResidenteId, setEditingResidenteId] = useState<number | null>(null)
+  const [feedback, setFeedback] = useState<string | null>(null)
 
-  const [residentes] = useState<Residente[]>([
-    {
-      id: 1,
-      nombre: 'María García López',
-      departamento: 'A-501',
-      dni: '12345678',
-      telefono: '+51 999 888 777',
-      estado: 'Activo',
-      registro: '15/03/2025'
-    },
-    {
-      id: 2,
-      nombre: 'Carlos Mendoza Rivera',
-      departamento: 'B-302',
-      dni: '87654321',
-      telefono: '+51 999 777 888',
-      estado: 'Activo',
-      registro: '10/03/2025'
-    },
-    {
-      id: 3,
-      nombre: 'Ana Sofía Ruiz',
-      departamento: 'C-105',
-      dni: '11223344',
-      telefono: '+51 999 666 555',
-      estado: 'Inactivo',
-      registro: '05/03/2025'
+  const [residentes, setResidentes] = useState<Residente[]>([])
+
+  useEffect(() => {
+    const cargarResidentes = async () => {
+      try {
+        const [usuarios, departamentos] = await Promise.all([
+          ApiService.getUsuarios(),
+          ApiService.getDepartamentos(),
+        ])
+
+        const depMap = new Map<number, string>()
+        departamentos.forEach((dep) => {
+          const id = Number(dep.iddepartamento)
+          if (!Number.isNaN(id)) {
+            depMap.set(id, String(dep.codigo || `ID ${id}`))
+          }
+        })
+
+        const mapped = usuarios.map((usuario) => {
+          const idDepartamento = Number(usuario.iddepartamento)
+          return {
+            id: Number(usuario.idusuario),
+            nombre: `${String(usuario.nombre || '')} ${String(usuario.apellido || '')}`.trim(),
+            departamento: depMap.get(idDepartamento) || `ID ${idDepartamento}`,
+            dni: String(usuario.dni || ''),
+            telefono: String(usuario.correo || '-'),
+            estado: 'Activo' as const,
+            registro: '-',
+          }
+        })
+
+        setResidentes(mapped)
+        setFeedback(null)
+      } catch {
+        setFeedback('No se pudieron cargar residentes desde el backend.')
+        setResidentes([])
+      }
     }
-  ])
+
+    cargarResidentes()
+  }, [])
 
   const filteredResidentes = residentes.filter(residente => {
     const matchesSearch = residente.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -43,24 +59,40 @@ export default function Residentes({}: ComponentProps) {
                          residente.departamento.toLowerCase().includes(searchTerm.toLowerCase())
     
     const matchesEstado = estadoFilter === 'Todos los estados' || residente.estado === estadoFilter
+    const piso = residente.departamento.split('-')[0]
+    const matchesPiso = pisoFilter === 'Todos los Pisos' || piso === pisoFilter
     
-    return matchesSearch && matchesEstado
+    return matchesSearch && matchesEstado && matchesPiso
   })
 
   const handleEdit = (id: number) => {
-    console.log('Editar residente:', id)
-    // Aquí iría la lógica para editar
+    setEditingResidenteId(id)
+    setFeedback('Modo edición habilitado. Usa el botón Guardar para confirmar cambios.')
   }
 
   const handleView = (id: number) => {
-    console.log('Ver residente:', id)
-    // Aquí iría la lógica para ver detalles
+    setSelectedResidenteId(id)
+    setFeedback(null)
   }
 
   const handleNewResident = () => {
-    console.log('Nuevo residente')
-    // Aquí iría la lógica para crear nuevo residente
+    setFeedback('Para crear residentes desde Dashboard falta endpoint/formulario de alta de usuarios en backend.')
   }
+
+  const handleFieldChange = (id: number, field: keyof Residente, value: string) => {
+    setResidentes((prev) =>
+      prev.map((residente) =>
+        residente.id === id ? { ...residente, [field]: value } : residente
+      )
+    )
+  }
+
+  const handleSave = () => {
+    setEditingResidenteId(null)
+    setFeedback('Cambios locales aplicados en la UI. Para persistir en backend falta endpoint de actualización de residentes en este módulo.')
+  }
+
+  const selectedResidente = residentes.find((r) => r.id === selectedResidenteId)
 
   return (
     <div className="residentes-container">
@@ -104,9 +136,9 @@ export default function Residentes({}: ComponentProps) {
             className="filter-select"
           >
             <option>Todos los Pisos</option>
-            <option>Piso A</option>
-            <option>Piso B</option>
-            <option>Piso C</option>
+            <option>A</option>
+            <option>B</option>
+            <option>C</option>
           </select>
         </div>
 
@@ -132,10 +164,40 @@ export default function Residentes({}: ComponentProps) {
           <tbody>
             {filteredResidentes.map((residente) => (
               <tr key={residente.id}>
-                <td className="resident-name">{residente.nombre}</td>
-                <td>{residente.departamento}</td>
+                <td className="resident-name">
+                  {editingResidenteId === residente.id ? (
+                    <input
+                      className="search-input"
+                      value={residente.nombre}
+                      onChange={(e) => handleFieldChange(residente.id, 'nombre', e.target.value)}
+                    />
+                  ) : (
+                    residente.nombre
+                  )}
+                </td>
+                <td>
+                  {editingResidenteId === residente.id ? (
+                    <input
+                      className="search-input"
+                      value={residente.departamento}
+                      onChange={(e) => handleFieldChange(residente.id, 'departamento', e.target.value.toUpperCase())}
+                    />
+                  ) : (
+                    residente.departamento
+                  )}
+                </td>
                 <td>{residente.dni}</td>
-                <td>{residente.telefono}</td>
+                <td>
+                  {editingResidenteId === residente.id ? (
+                    <input
+                      className="search-input"
+                      value={residente.telefono}
+                      onChange={(e) => handleFieldChange(residente.id, 'telefono', e.target.value)}
+                    />
+                  ) : (
+                    residente.telefono
+                  )}
+                </td>
                 <td>
                   <span className={`status-badge ${residente.estado.toLowerCase()}`}>
                     {residente.estado}
@@ -151,6 +213,15 @@ export default function Residentes({}: ComponentProps) {
                     >
                       ✏️ Editar
                     </button>
+                    {editingResidenteId === residente.id && (
+                      <button 
+                        onClick={handleSave}
+                        className="action-btn extend-btn"
+                        title="Guardar"
+                      >
+                        💾 Guardar
+                      </button>
+                    )}
                     <button 
                       onClick={() => handleView(residente.id)}
                       className="action-btn view-btn"
@@ -165,6 +236,20 @@ export default function Residentes({}: ComponentProps) {
           </tbody>
         </table>
       </div>
+
+      {feedback && (
+        <div className="no-results" style={{ marginTop: '1rem' }}>
+          <p>{feedback}</p>
+        </div>
+      )}
+
+      {selectedResidente && (
+        <div className="no-results" style={{ marginTop: '1rem' }}>
+          <p>
+            Residente seleccionado: {selectedResidente.nombre} | DNI: {selectedResidente.dni} | Depto: {selectedResidente.departamento}
+          </p>
+        </div>
+      )}
 
       {filteredResidentes.length === 0 && (
         <div className="no-results">

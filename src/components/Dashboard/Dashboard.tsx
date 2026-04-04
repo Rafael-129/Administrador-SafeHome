@@ -22,7 +22,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       />
       
       <div className="main-content">
-        {activeSection === 'dashboard' && <DashboardContent />}
+        {activeSection === 'dashboard' && <DashboardContent onQuickNavigate={setActiveSection} />}
         {activeSection === 'residentes' && <Residentes onBack={() => setActiveSection('dashboard')} />}
         {activeSection === 'visitantes' && <Visitantes onBack={() => setActiveSection('dashboard')} />}
         {activeSection === 'historial' && <Historial onBack={() => setActiveSection('dashboard')} />}

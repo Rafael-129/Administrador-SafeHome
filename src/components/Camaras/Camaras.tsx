@@ -6,6 +6,7 @@ export default function Camaras({}: ComponentProps) {
   const [selectedCamera, setSelectedCamera] = useState(1)
   const [isRecording, setIsRecording] = useState(false)
   const [zoom] = useState(1)
+  const [feedback, setFeedback] = useState<string | null>(null)
 
   const camaras: Camara[] = [
     {
@@ -47,31 +48,61 @@ export default function Camaras({}: ComponentProps) {
   const offlineCameras = camaras.filter(cam => cam.estado === 'Offline').length
 
   const handleGrabarVideo = () => {
+    if (selectedCameraData.estado !== 'Online') {
+      setFeedback('No se puede grabar una cámara offline.')
+      return
+    }
     setIsRecording(!isRecording)
-    console.log(isRecording ? 'Deteniendo grabación' : 'Iniciando grabación')
+    setFeedback(isRecording ? 'Grabación detenida.' : 'Grabación iniciada.')
   }
 
   const handleTomarCaptura = () => {
-    console.log('Tomando captura de', selectedCameraData.nombre)
-    alert('Captura tomada exitosamente')
+    if (selectedCameraData.estado !== 'Online') {
+      setFeedback('No se puede tomar captura de una cámara offline.')
+      return
+    }
+
+    const canvas = document.createElement('canvas')
+    canvas.width = 640
+    canvas.height = 360
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+      setFeedback('No se pudo crear la captura.')
+      return
+    }
+
+    ctx.fillStyle = '#0f172a'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.fillStyle = '#38bdf8'
+    ctx.font = 'bold 28px sans-serif'
+    ctx.fillText(selectedCameraData.nombre, 30, 80)
+    ctx.fillStyle = '#94a3b8'
+    ctx.font = '20px sans-serif'
+    ctx.fillText(selectedCameraData.ubicacion, 30, 120)
+    ctx.fillText(new Date().toLocaleString('es-PE'), 30, 160)
+
+    const url = canvas.toDataURL('image/png')
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `captura_camara_${selectedCameraData.id}.png`
+    link.click()
+    setFeedback('Captura generada y descargada.')
   }
 
   const handleVerGrabaciones = () => {
-    console.log('Ver grabaciones')
-    alert('Abriendo archivo de grabaciones...')
+    setFeedback('Grabaciones no conectadas a backend. Esta acción requiere almacenamiento real.')
   }
 
   const handleConfigurarAlertas = () => {
-    console.log('Configurar alertas')
-    alert('Abriendo configuración de alertas...')
+    setFeedback('Configuración de alertas pendiente de integración con notificaciones del servidor.')
   }
 
   const handleFullscreen = () => {
-    console.log('Modo pantalla completa')
+    setFeedback('Modo pantalla completa depende del stream de video real.')
   }
 
   const handleSettings = () => {
-    console.log('Configuraciones de cámara')
+    setFeedback(`Configuración local abierta para ${selectedCameraData.nombre}.`)
   }
 
   return (
@@ -213,6 +244,14 @@ export default function Camaras({}: ComponentProps) {
           🔔 Configurar Alertas
         </button>
       </div>
+
+      {feedback && (
+        <div className="camera-stats" style={{ marginTop: '1rem' }}>
+          <div className="stat-item online" style={{ width: '100%' }}>
+            <div className="stat-label" style={{ color: '#e2e8f0' }}>{feedback}</div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

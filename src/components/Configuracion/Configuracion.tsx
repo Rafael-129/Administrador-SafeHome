@@ -17,7 +17,6 @@ export default function Configuracion({ }: ConfiguracionProps) {
   const [notificacionesMovil, setNotificacionesMovil] = useState(true)
   const [autenticacionDosFactor, setAutenticacionDosFactor] = useState(false)
   const [tiempoSesion, setTiempoSesion] = useState('8')
-  const [intervaloCamaras, setIntervaloCamaras] = useState('30')
   const [retencionLogs, setRetencionLogs] = useState('90')
   const [feedback, setFeedback] = useState<string | null>(null)
   const importFileRef = useRef<HTMLInputElement | null>(null)
@@ -47,7 +46,6 @@ export default function Configuracion({ }: ConfiguracionProps) {
       setNotificacionesMovil(parsed.notificacionesMovil ?? true)
       setAutenticacionDosFactor(parsed.autenticacionDosFactor ?? false)
       setTiempoSesion(parsed.tiempoSesion ?? '8')
-      setIntervaloCamaras(parsed.intervaloCamaras ?? '30')
       setRetencionLogs(parsed.retencionLogs ?? '90')
     } catch {
       setFeedback('No se pudo cargar la configuración guardada.')
@@ -64,7 +62,6 @@ export default function Configuracion({ }: ConfiguracionProps) {
     notificacionesMovil,
     autenticacionDosFactor,
     tiempoSesion,
-    intervaloCamaras,
     retencionLogs,
   })
 
@@ -84,7 +81,6 @@ export default function Configuracion({ }: ConfiguracionProps) {
       setNotificacionesMovil(true)
       setAutenticacionDosFactor(false)
       setTiempoSesion('8')
-      setIntervaloCamaras('30')
       setRetencionLogs('90')
       localStorage.removeItem(STORAGE_KEY)
       setFeedback('Configuración restaurada a valores por defecto.')
@@ -127,7 +123,6 @@ export default function Configuracion({ }: ConfiguracionProps) {
       setNotificacionesMovil(parsed.notificacionesMovil ?? notificacionesMovil)
       setAutenticacionDosFactor(parsed.autenticacionDosFactor ?? autenticacionDosFactor)
       setTiempoSesion(parsed.tiempoSesion ?? tiempoSesion)
-      setIntervaloCamaras(parsed.intervaloCamaras ?? intervaloCamaras)
       setRetencionLogs(parsed.retencionLogs ?? retencionLogs)
       setFeedback('Configuración importada. Guarda para persistirla.')
     } catch {
@@ -279,19 +274,6 @@ export default function Configuracion({ }: ConfiguracionProps) {
           <div className="tab-content">
             <h3>Configuración del Sistema</h3>
             <div className="form-grid">
-              <div className="form-group">
-                <label>Intervalo de Actualización de Cámaras (segundos)</label>
-                <select
-                  value={intervaloCamaras}
-                  onChange={(e) => setIntervaloCamaras(e.target.value)}
-                  className="form-select"
-                >
-                  <option value="15">15 segundos</option>
-                  <option value="30">30 segundos</option>
-                  <option value="60">1 minuto</option>
-                  <option value="120">2 minutos</option>
-                </select>
-              </div>
               <div className="form-group">
                 <label>Retención de Logs (días)</label>
                 <select

@@ -12,24 +12,21 @@ export default function DashboardContent({ onQuickNavigate }: DashboardContentPr
     residentesActivos: 0,
     ingresosHoy: 0,
     visitantesActivos: 0,
-    camarasOnline: 0,
   })
 
   useEffect(() => {
     const cargarDashboard = async () => {
       try {
-        const [usuarios, historialHoy, visitantesHoy, escaneosRecientes] = await Promise.all([
+        const [usuarios, historialHoy, visitantesHoy] = await Promise.all([
           ApiService.getUsuarios(),
           ApiService.getHistorialHoy(),
           ApiService.getVisitantesHoy(),
-          ApiService.getEscaneosRecientes(),
         ])
 
         setStats({
           residentesActivos: usuarios.length,
           ingresosHoy: historialHoy.length,
           visitantesActivos: visitantesHoy.length,
-          camarasOnline: escaneosRecientes.length > 0 ? 1 : 0,
         })
 
         const mapped = historialHoy.slice(0, 6).map((registro) => {
@@ -57,7 +54,6 @@ export default function DashboardContent({ onQuickNavigate }: DashboardContentPr
           residentesActivos: 0,
           ingresosHoy: 0,
           visitantesActivos: 0,
-          camarasOnline: 0,
         })
         setActivityData([])
       }
@@ -108,11 +104,6 @@ export default function DashboardContent({ onQuickNavigate }: DashboardContentPr
           <div className="stat-label">Visitantes Activos</div>
         </div>
         
-        <div className="stat-card">
-          <div className="stat-indicator orange"></div>
-          <div className="stat-number">{stats.camarasOnline}</div>
-          <div className="stat-label">Cámaras Online</div>
-        </div>
       </div>
 
       {/* Content Grid */}
@@ -156,7 +147,7 @@ export default function DashboardContent({ onQuickNavigate }: DashboardContentPr
               <div className="alert-header">
                 <strong>Mantenimiento programado</strong>
               </div>
-              <div className="alert-description">Sistema de cámaras - 2:00 AM</div>
+              <div className="alert-description">Sistema de accesos - 2:00 AM</div>
             </div>
             
             <div className="alert-item success">

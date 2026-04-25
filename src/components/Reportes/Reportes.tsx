@@ -16,7 +16,6 @@ export default function Reportes({}: ComponentProps) {
     rendimiento: false,
     residentes: false,
     incidentes: false,
-    camaras: false,
   })
 
   const reportesRapidos: ReporteRapido[] = [
@@ -133,8 +132,7 @@ export default function Reportes({}: ComponentProps) {
     { id: 'visitantes', label: 'Visitantes', checked: false },
     { id: 'rendimiento', label: 'Rendimiento', checked: false },
     { id: 'residentes', label: 'Residentes', checked: false },
-    { id: 'incidentes', label: 'Incidentes', checked: false },
-    { id: 'camaras', label: 'Cámaras', checked: false }
+    { id: 'incidentes', label: 'Incidentes', checked: false }
   ]
 
   const descargarArchivo = (nombre: string, contenido: string, mime = 'text/plain;charset=utf-8') => {

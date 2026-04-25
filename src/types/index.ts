@@ -37,15 +37,6 @@ export interface RegistroAcceso {
   estado: 'Exitoso' | 'Denegado'
 }
 
-export interface Camara {
-  id: number
-  nombre: string
-  ubicacion: string
-  resolucion: string
-  fps: string
-  estado: 'Online' | 'Offline'
-}
-
 export interface ReporteRapido {
   id: string
   titulo: string
@@ -94,6 +85,5 @@ export type SectionId =
   | 'residentes' 
   | 'visitantes' 
   | 'historial' 
-  | 'camaras' 
   | 'reportes' 
   | 'configuracion'

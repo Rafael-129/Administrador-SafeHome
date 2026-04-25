@@ -6,7 +6,6 @@ export default function Navigation({ activeSection, onSectionChange, onLogout }:
     { id: 'residentes', name: 'Residentes', icon: '👥' },
     { id: 'visitantes', name: 'Visitantes', icon: '🚶' },
     { id: 'historial', name: 'Historial', icon: '📋' },
-    { id: 'camaras', name: 'Cámaras', icon: '📹' },
     { id: 'reportes', name: 'Reportes', icon: '📊' },
     { id: 'configuracion', name: 'Configuración', icon: '⚙️' }
   ]

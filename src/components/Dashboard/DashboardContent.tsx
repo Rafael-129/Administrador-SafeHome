@@ -78,7 +78,7 @@ export default function DashboardContent({ onQuickNavigate }: DashboardContentPr
       {/* Header */}
       <div className="dashboard-header">
         <div>
-          <h1>Dashboard Principal</h1>
+          <h1>Administrador Principal</h1>
           <p className="date-text">{getCurrentDate()}</p>
         </div>
         <div className="admin-badge">Admin</div>

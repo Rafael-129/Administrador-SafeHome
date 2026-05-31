@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 
 copilot-instructions.md
+
+.env
+.env.local

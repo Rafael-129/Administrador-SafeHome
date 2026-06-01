@@ -160,18 +160,7 @@ export default function Reportes({}: ComponentProps) {
     { id: 'incidentes', label: 'Incidentes', checked: false }
   ]
 
-  const parseFecha = (fecha: string) => {
-    if (!fecha) return null
-    if (/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
-      const iso = new Date(`${fecha}T00:00:00`)
-      return Number.isNaN(iso.getTime()) ? null : iso
-    }
-    const parts = fecha.split('/').map((p) => Number(p))
-    if (parts.length !== 3 || parts.some((p) => Number.isNaN(p))) return null
-    const [day, month, year] = parts
-    const parsed = new Date(year, month - 1, day)
-    return Number.isNaN(parsed.getTime()) ? null : parsed
-  }
+  
 
   const descargarArchivo = (nombre: string, contenido: string, mime = 'text/plain;charset=utf-8') => {
     try {
@@ -219,46 +208,18 @@ export default function Reportes({}: ComponentProps) {
   const handleGenerarReporte = (tipoReporte: string) => {
     void (async () => {
       try {
-        const rows = await ApiService.getHistorial()
-        const desde = new Date().toISOString().slice(0, 10)
-        const filtered = rows.filter((r: any) => {
-          // basic mapping: seguridad/residente/visitante selection
-          if (tipoReporte === 'Reporte Diario') return String(r.fecha_entrada || '').startsWith(desde)
-          if (tipoReporte === 'Reporte Seguridad') return Boolean(r.estado && String(r.estado).toLowerCase().includes('deneg'))
-          if (tipoReporte === 'Reporte Visitantes') return !!r.idvisitante
-          if (tipoReporte === 'Reporte de Residentes') return !!r.idusuario
-          return true
-        })
-
-        if (!filtered.length) {
-          setFeedback('No hay datos para el reporte solicitado.')
-          return
-        }
-
-        // build CSV
-        const header = ['Persona', 'Tipo', 'Accion', 'Hora', 'Fecha', 'Ubicacion', 'Estado']
-        const rowsCsv = filtered.map((row: any) => {
-          const persona = row.usuario_info
-            ? `${String(row.usuario_info.nombre || '')} ${String(row.usuario_info.apellido || '')}`.trim()
-            : row.visitante_info
-              ? `${String(row.visitante_info.nombre || '')} ${String(row.visitante_info.apellido || '')}`.trim()
-              : 'Desconocido'
-          const tipo = row.idusuario ? 'Residente' : row.idvisitante ? 'Visitante' : 'No Identificado'
-          const estado = String(row.estado) === 'Permitido' ? 'Exitoso' : 'Denegado'
-          return [persona, tipo, estado === 'Exitoso' ? 'Acceso Autorizado' : 'Acceso Denegado', String(row.hora_entrada || '-'), new Date(String(row.fecha_entrada)).toLocaleDateString('es-PE'), 'Entrada Principal', estado]
-        })
-
-        const csv = [header, ...rowsCsv]
-          .map((cols) => cols.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
-          .join('\n')
-
-        const ok = descargarArchivo(`${tipoReporte.replaceAll(' ', '_').toLowerCase()}.csv`, csv, 'text/csv;charset=utf-8')
-        if (ok) {
-          agregarHistorial(tipoReporte)
-          setFeedback(`${tipoReporte} generado y descargado (CSV).`)
-        } else {
-          setFeedback('El navegador bloqueó la descarga. Abriendo en nueva pestaña...')
-        }
+        const formato = 'csv'
+        const blob = await ApiService.downloadReporte({ tipo: tipoReporte, formato })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `${tipoReporte.replaceAll(' ', '_').toLowerCase()}.csv`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+        agregarHistorial(tipoReporte)
+        setFeedback(`${tipoReporte} generado y descargado (CSV).`)
       } catch (e) {
         setFeedback('Error generando reporte: ' + (e instanceof Error ? e.message : String(e)))
       }
@@ -268,50 +229,19 @@ export default function Reportes({}: ComponentProps) {
   const handleGenerarPersonalizado = () => {
     void (async () => {
       try {
-        const desdeDate = parseFecha(fechaDesde)
-        const hastaDate = parseFecha(fechaHasta)
-        const rows = await ApiService.getHistorial()
-        const filtered = rows.filter((r: any) => {
-          const fecha = new Date(String(r.fecha_entrada))
-          if (desdeDate && fecha < desdeDate) return false
-          if (hastaDate && fecha > new Date(hastaDate.getTime() + 24 * 60 * 60 * 1000)) return false
-          // include by selectedDataTypes
-          if (selectedDataTypes.visitantes && r.idvisitante) return true
-          if (selectedDataTypes.residentes && r.idusuario) return true
-          if (selectedDataTypes.accesos && (r.idusuario || r.idvisitante)) return true
-          if (selectedDataTypes.incidentes && String(r.estado).toLowerCase().includes('deneg')) return true
-          return false
-        })
-
-        if (!filtered.length) {
-          setFeedback('No hay datos que coincidan con los filtros seleccionados.')
-          return
-        }
-
-        // export as CSV for now
-        const header = ['Persona', 'Tipo', 'Accion', 'Hora', 'Fecha', 'Ubicacion', 'Estado']
-        const rowsCsv = filtered.map((row: any) => {
-          const persona = row.usuario_info
-            ? `${String(row.usuario_info.nombre || '')} ${String(row.usuario_info.apellido || '')}`.trim()
-            : row.visitante_info
-              ? `${String(row.visitante_info.nombre || '')} ${String(row.visitante_info.apellido || '')}`.trim()
-              : 'Desconocido'
-          const tipo = row.idusuario ? 'Residente' : row.idvisitante ? 'Visitante' : 'No Identificado'
-          const estado = String(row.estado) === 'Permitido' ? 'Exitoso' : 'Denegado'
-          return [persona, tipo, estado === 'Exitoso' ? 'Acceso Autorizado' : 'Acceso Denegado', String(row.hora_entrada || '-'), new Date(String(row.fecha_entrada)).toLocaleDateString('es-PE'), 'Entrada Principal', estado]
-        })
-
-        const csv = [header, ...rowsCsv]
-          .map((cols) => cols.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
-          .join('\n')
-
-        const ok = descargarArchivo(`${tituloReporte.replaceAll(' ', '_').toLowerCase()}.csv`, csv, 'text/csv;charset=utf-8')
-        if (ok) {
-          agregarHistorial(tituloReporte)
-          setFeedback('Reporte personalizado generado y descargado (CSV).')
-        } else {
-          setFeedback('El navegador bloqueó la descarga. Abriendo en nueva pestaña...')
-        }
+        const formato = formatoExportacion.includes('PDF') ? 'pdf' : formatoExportacion.includes('Excel') ? 'xlsx' : 'csv'
+        const blob = await ApiService.downloadReporte({ tipo: tituloReporte, desde: fechaDesde, hasta: fechaHasta, formato })
+        const ext = formato === 'pdf' ? 'pdf' : formato === 'xlsx' ? 'xlsx' : 'csv'
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `${tituloReporte.replaceAll(' ', '_').toLowerCase()}.${ext}`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+        agregarHistorial(tituloReporte)
+        setFeedback('Reporte personalizado generado y descargado.')
       } catch (e) {
         setFeedback('Error generando reporte personalizado: ' + (e instanceof Error ? e.message : String(e)))
       }

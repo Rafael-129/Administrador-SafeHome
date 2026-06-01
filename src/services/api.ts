@@ -135,6 +135,28 @@ class ApiService {
   async getEstadisticas(desde: string, hasta: string) {
     return this.request<Record<string, unknown>>(`/historial/estadisticas/?desde=${desde}&hasta=${hasta}`)
   }
+
+  async downloadReporte(params: { tipo?: string; desde?: string; hasta?: string; formato?: string }) {
+    const qs = [] as string[]
+    if (params.tipo) qs.push(`tipo=${encodeURIComponent(params.tipo)}`)
+    if (params.desde) qs.push(`desde=${encodeURIComponent(params.desde)}`)
+    if (params.hasta) qs.push(`hasta=${encodeURIComponent(params.hasta)}`)
+    if (params.formato) qs.push(`formato=${encodeURIComponent(params.formato)}`)
+    const url = `${API_BASE_URL}/reportes/${qs.length ? '?' + qs.join('&') : ''}`
+    const resp = await fetch(url, { method: 'GET' })
+    if (!resp.ok) {
+      let detail = `HTTP ${resp.status}`
+      try {
+        const payload = await resp.json()
+        detail = JSON.stringify(payload)
+      } catch {
+        detail = await resp.text().catch(() => detail)
+      }
+      throw new Error(detail)
+    }
+    const blob = await resp.blob()
+    return blob
+  }
 }
 
 export default new ApiService()

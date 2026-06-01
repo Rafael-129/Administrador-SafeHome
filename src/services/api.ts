@@ -25,8 +25,26 @@ class ApiService {
     })
 
     if (!response.ok) {
-      const detail = await response.text().catch(() => 'Error de red')
-      throw new Error(detail || `HTTP ${response.status}`)
+      let detail = `HTTP ${response.status}`
+      try {
+        const payload = await response.json()
+        if (typeof payload === 'string') {
+          detail = payload
+        } else if (payload && typeof payload === 'object') {
+          const firstValue = Object.values(payload)[0]
+          if (Array.isArray(firstValue)) {
+            detail = String(firstValue[0] || detail)
+          } else if (firstValue != null) {
+            detail = String(firstValue)
+          }
+        }
+      } catch {
+        const text = await response.text().catch(() => '')
+        if (text) {
+          detail = text
+        }
+      }
+      throw new Error(detail)
     }
 
     if (response.status === 204) {
@@ -41,6 +59,26 @@ class ApiService {
     return toArray(data)
   }
 
+  async createUsuario(payload: Record<string, unknown>) {
+    return this.request<Record<string, unknown>>('/usuarios/', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  }
+
+  async updateUsuario(id: number, payload: Record<string, unknown>) {
+    return this.request<Record<string, unknown>>(`/usuarios/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    })
+  }
+
+  async deleteUsuario(id: number) {
+    return this.request<null>(`/usuarios/${id}/`, {
+      method: 'DELETE',
+    })
+  }
+
   async getVisitantes() {
     const data = await this.request<ApiResponse<Record<string, unknown>>>('/visitantes/')
     return toArray(data)
@@ -50,6 +88,25 @@ class ApiService {
     return this.request<Record<string, unknown>>('/visitantes/', {
       method: 'POST',
       body: JSON.stringify(payload),
+    })
+  }
+
+  async updateVisitante(id: number, payload: Record<string, unknown>) {
+    return this.request<Record<string, unknown>>(`/visitantes/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    })
+  }
+
+  async deleteVisitante(id: number) {
+    return this.request<null>(`/visitantes/${id}/`, {
+      method: 'DELETE',
+    })
+  }
+
+  async finalizarVisitante(id: number) {
+    return this.request<Record<string, unknown>>(`/visitantes/${id}/finalizar/`, {
+      method: 'POST',
     })
   }
 

@@ -17,16 +17,42 @@ export default function Historial({}: ComponentProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [tipoFilter, setTipoFilter] = useState('Todos los tipos')
   const [fechaFilter, setFechaFilter] = useState('Hoy')
+  const [estadoFilter, setEstadoFilter] = useState('Todos los estados')
   const [activeTab, setActiveTab] = useState('accesos')
   const [feedback, setFeedback] = useState<string | null>(null)
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+
+  const [registrosAcceso, setRegistrosAcceso] = useState<RegistroAcceso[]>([])
+  const [incidentes, setIncidentes] = useState<IncidenteEvento[]>([])
+  const [eventosSistema, setEventosSistema] = useState<IncidenteEvento[]>([])
 
   const parseFecha = (fecha: string) => {
-    const [day, month, year] = fecha.split('/').map(Number)
-    return new Date(year, month - 1, day)
+    if (!fecha) {
+      return null
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+      const iso = new Date(`${fecha}T00:00:00`)
+      return Number.isNaN(iso.getTime()) ? null : iso
+    }
+
+    const parts = fecha.split('/').map((part) => Number(part))
+    if (parts.length !== 3 || parts.some((part) => Number.isNaN(part))) {
+      return null
+    }
+
+    const [day, month, year] = parts
+    const parsed = new Date(year, month - 1, day)
+    return Number.isNaN(parsed.getTime()) ? null : parsed
   }
 
   const applyFechaFilter = (fecha: string) => {
     const fechaRegistro = parseFecha(fecha)
+    if (!fechaRegistro) {
+      return false
+    }
+
     const hoy = new Date()
     hoy.setHours(0, 0, 0, 0)
 
@@ -54,82 +80,89 @@ export default function Historial({}: ComponentProps) {
     return true
   }
 
-  const [registrosAcceso, setRegistrosAcceso] = useState<RegistroAcceso[]>([])
-  const [incidentes, setIncidentes] = useState<IncidenteEvento[]>([])
-  const [eventosSistema, setEventosSistema] = useState<IncidenteEvento[]>([])
+  const cargarHistorial = async () => {
+    setIsLoading(true)
+    try {
+      const [historialRows, escaneos] = await Promise.all([
+        ApiService.getHistorial(),
+        ApiService.getEscaneosRecientes(),
+      ])
+
+      const mapped = historialRows.map((row) => {
+        const persona = row.usuario_info
+          ? `${String((row.usuario_info as Record<string, unknown>).nombre || '')} ${String((row.usuario_info as Record<string, unknown>).apellido || '')}`.trim()
+          : row.visitante_info
+            ? `${String((row.visitante_info as Record<string, unknown>).nombre || '')} ${String((row.visitante_info as Record<string, unknown>).apellido || '')}`.trim()
+            : 'Desconocido'
+
+        const tipo: RegistroAcceso['tipo'] = row.idusuario
+          ? 'Residente'
+          : row.idvisitante
+            ? 'Visitante'
+            : 'No Identificado'
+
+        const estado: RegistroAcceso['estado'] = String(row.estado) === 'Permitido' ? 'Exitoso' : 'Denegado'
+
+        return {
+          id: Number(row.idhistorial),
+          persona,
+          tipo,
+          accion: estado === 'Exitoso' ? 'Acceso Autorizado' : 'Acceso Denegado',
+          hora: String(row.hora_entrada || '-'),
+          fecha: new Date(String(row.fecha_entrada)).toLocaleDateString('es-PE'),
+          ubicacion: 'Entrada Principal',
+          estado,
+        }
+      })
+
+      setRegistrosAcceso(mapped)
+
+      const denegados = mapped
+        .filter((r) => r.estado === 'Denegado')
+        .slice(0, 10)
+        .map((r) => ({
+          id: r.id,
+          tipo: 'Intento de acceso',
+          descripcion: `${r.persona} tuvo un intento denegado.`,
+          hora: r.hora,
+          fecha: r.fecha,
+          ubicacion: r.ubicacion,
+          estado: 'Registrado',
+        }))
+      setIncidentes(denegados)
+
+      const eventos = escaneos.slice(0, 10).map((escaneo) => ({
+        id: Number(escaneo.idscanner),
+        tipo: 'Escaneo',
+        descripcion: `Escaneo de ${String(escaneo.tipo_persona || 'desconocido')}`,
+        hora: new Date(String(escaneo.fecha)).toLocaleTimeString('es-PE'),
+        fecha: new Date(String(escaneo.fecha)).toLocaleDateString('es-PE'),
+        ubicacion: 'Control de acceso',
+        estado: 'Completado',
+      }))
+      setEventosSistema(eventos)
+
+      setFeedback(null)
+    } catch {
+      setRegistrosAcceso([])
+      setIncidentes([])
+      setEventosSistema([])
+      setFeedback('No se pudo cargar historial desde backend.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const cargar = async () => {
-      try {
-        const [historialRows, escaneos] = await Promise.all([
-          ApiService.getHistorial(),
-          ApiService.getEscaneosRecientes(),
-        ])
+    void cargarHistorial()
+  }, [])
 
-        const mapped = historialRows.map((row) => {
-          const persona = row.usuario_info
-            ? `${String((row.usuario_info as Record<string, unknown>).nombre || '')} ${String((row.usuario_info as Record<string, unknown>).apellido || '')}`.trim()
-            : row.visitante_info
-              ? `${String((row.visitante_info as Record<string, unknown>).nombre || '')} ${String((row.visitante_info as Record<string, unknown>).apellido || '')}`.trim()
-              : 'Desconocido'
-
-          const tipo: RegistroAcceso['tipo'] = row.idusuario
-            ? 'Residente'
-            : row.idvisitante
-              ? 'Visitante'
-              : 'No Identificado'
-
-          const estado: RegistroAcceso['estado'] = String(row.estado) === 'Permitido' ? 'Exitoso' : 'Denegado'
-
-          return {
-            id: Number(row.idhistorial),
-            persona,
-            tipo,
-            accion: estado === 'Exitoso' ? 'Acceso Autorizado' : 'Acceso Denegado',
-            hora: String(row.hora_entrada || '-'),
-            fecha: new Date(String(row.fecha_entrada)).toLocaleDateString('es-PE'),
-            ubicacion: 'Entrada Principal',
-            estado,
-          }
-        })
-
-        setRegistrosAcceso(mapped)
-
-        const denegados = mapped
-          .filter((r) => r.estado === 'Denegado')
-          .slice(0, 10)
-          .map((r) => ({
-            id: r.id,
-            tipo: 'Intento de acceso',
-            descripcion: `${r.persona} tuvo un intento denegado.`,
-            hora: r.hora,
-            fecha: r.fecha,
-            ubicacion: r.ubicacion,
-            estado: 'Registrado',
-          }))
-        setIncidentes(denegados)
-
-        const eventos = escaneos.slice(0, 10).map((escaneo) => ({
-          id: Number(escaneo.idscanner),
-          tipo: 'Escaneo',
-          descripcion: `Escaneo de ${String(escaneo.tipo_persona || 'desconocido')}`,
-          hora: new Date(String(escaneo.fecha)).toLocaleTimeString('es-PE'),
-          fecha: new Date(String(escaneo.fecha)).toLocaleDateString('es-PE'),
-          ubicacion: 'Control de acceso',
-          estado: 'Completado',
-        }))
-        setEventosSistema(eventos)
-
-        setFeedback(null)
-      } catch {
-        setRegistrosAcceso([])
-        setIncidentes([])
-        setEventosSistema([])
-        setFeedback('No se pudo cargar historial desde backend.')
-      }
+  useEffect(() => {
+    const onVisitanteFinalizado = (_e: Event) => {
+      void cargarHistorial()
     }
-
-    cargar()
+    window.addEventListener('visitanteFinalizado', onVisitanteFinalizado as EventListener)
+    return () => window.removeEventListener('visitanteFinalizado', onVisitanteFinalizado as EventListener)
   }, [])
 
   const filteredRegistros = registrosAcceso.filter(registro => {
@@ -139,22 +172,73 @@ export default function Historial({}: ComponentProps) {
     
     const matchesTipo = tipoFilter === 'Todos los tipos' || registro.tipo === tipoFilter
     const matchesFecha = applyFechaFilter(registro.fecha)
+    const matchesEstado = estadoFilter === 'Todos los estados' || registro.estado === estadoFilter
     
-    return matchesSearch && matchesTipo && matchesFecha
+    return matchesSearch && matchesTipo && matchesFecha && matchesEstado
+  })
+
+  const filteredIncidentes = incidentes.filter((incidente) => {
+    const matchesSearch = incidente.tipo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      incidente.descripcion.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      incidente.ubicacion.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesFecha = applyFechaFilter(incidente.fecha)
+    return matchesSearch && matchesFecha
+  })
+
+  const filteredEventos = eventosSistema.filter((evento) => {
+    const matchesSearch = evento.tipo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      evento.descripcion.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      evento.ubicacion.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesFecha = applyFechaFilter(evento.fecha)
+    return matchesSearch && matchesFecha
   })
 
   const handleExportar = () => {
-    const rows = filteredRegistros.map((registro) => [
-      registro.persona,
-      registro.tipo,
-      registro.accion,
-      registro.hora,
-      registro.fecha,
-      registro.ubicacion,
-      registro.estado,
-    ])
+    let rows: string[][] = []
+    let header: string[] = []
 
-    const header = ['Persona', 'Tipo', 'Accion', 'Hora', 'Fecha', 'Ubicacion', 'Estado']
+    if (activeTab === 'accesos') {
+      rows = filteredRegistros.map((registro) => [
+        registro.persona,
+        registro.tipo,
+        registro.accion,
+        registro.hora,
+        registro.fecha,
+        registro.ubicacion,
+        registro.estado,
+      ])
+      header = ['Persona', 'Tipo', 'Accion', 'Hora', 'Fecha', 'Ubicacion', 'Estado']
+    }
+
+    if (activeTab === 'incidentes') {
+      rows = filteredIncidentes.map((incidente) => [
+        incidente.tipo,
+        incidente.descripcion,
+        incidente.hora,
+        incidente.fecha,
+        incidente.ubicacion,
+        incidente.estado,
+      ])
+      header = ['Tipo', 'Descripcion', 'Hora', 'Fecha', 'Ubicacion', 'Estado']
+    }
+
+    if (activeTab === 'eventos') {
+      rows = filteredEventos.map((evento) => [
+        evento.tipo,
+        evento.descripcion,
+        evento.hora,
+        evento.fecha,
+        evento.ubicacion,
+        evento.estado,
+      ])
+      header = ['Tipo', 'Descripcion', 'Hora', 'Fecha', 'Ubicacion', 'Estado']
+    }
+
+    if (!rows.length || !header.length) {
+      setFeedback('No hay datos para exportar con los filtros actuales.')
+      return
+    }
+
     const csv = [header, ...rows]
       .map((cols) => cols.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
       .join('\n')
@@ -168,7 +252,7 @@ export default function Historial({}: ComponentProps) {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
-    setFeedback('Historial exportado en CSV.')
+    setFeedback(`Datos de ${activeTab} exportados en CSV.`)
   }
 
   const renderTabContent = () => {
@@ -189,6 +273,11 @@ export default function Historial({}: ComponentProps) {
                 </tr>
               </thead>
               <tbody>
+                {isLoading && (
+                  <tr>
+                    <td colSpan={7}>Cargando historial...</td>
+                  </tr>
+                )}
                 {filteredRegistros.map((registro) => (
                   <tr key={registro.id}>
                     <td className="persona-name">{registro.persona}</td>
@@ -228,7 +317,12 @@ export default function Historial({}: ComponentProps) {
                 </tr>
               </thead>
               <tbody>
-                {incidentes.map((incidente) => (
+                {isLoading && (
+                  <tr>
+                    <td colSpan={6}>Cargando incidentes...</td>
+                  </tr>
+                )}
+                {filteredIncidentes.map((incidente) => (
                   <tr key={incidente.id}>
                     <td className="tipo-incidente">{incidente.tipo}</td>
                     <td>{incidente.descripcion}</td>
@@ -262,7 +356,12 @@ export default function Historial({}: ComponentProps) {
                 </tr>
               </thead>
               <tbody>
-                {eventosSistema.map((evento) => (
+                {isLoading && (
+                  <tr>
+                    <td colSpan={6}>Cargando eventos...</td>
+                  </tr>
+                )}
+                {filteredEventos.map((evento) => (
                   <tr key={evento.id}>
                     <td className="tipo-evento">{evento.tipo}</td>
                     <td>{evento.descripcion}</td>
@@ -334,15 +433,43 @@ export default function Historial({}: ComponentProps) {
             <option>Último mes</option>
           </select>
 
-          <button className="more-filters-btn">
-            🔧 Más Filtros
+          <button
+            className="more-filters-btn"
+            onClick={() => setShowAdvancedFilters((prev) => !prev)}
+          >
+            🔧 {showAdvancedFilters ? 'Ocultar Filtros' : 'Más Filtros'}
+          </button>
+
+          <button
+            className="more-filters-btn"
+            onClick={() => void cargarHistorial()}
+            disabled={isLoading}
+            title="Recargar historial"
+          >
+            {isLoading ? '⏳ Cargando' : '🔄 Recargar'}
           </button>
         </div>
 
-        <button onClick={handleExportar} className="export-btn">
+        <button onClick={handleExportar} className="export-btn" disabled={isLoading}>
           📥 Exportar
         </button>
       </div>
+
+      {showAdvancedFilters && (
+        <div className="historial-controls" style={{ marginTop: '0.75rem' }}>
+          <div className="filters-container">
+            <select
+              value={estadoFilter}
+              onChange={(e) => setEstadoFilter(e.target.value)}
+              className="filter-select"
+            >
+              <option>Todos los estados</option>
+              <option>Exitoso</option>
+              <option>Denegado</option>
+            </select>
+          </div>
+        </div>
+      )}
 
       {feedback && (
         <div className="no-results" style={{ marginBottom: '1rem' }}>
@@ -386,9 +513,21 @@ export default function Historial({}: ComponentProps) {
         </div>
       </div>
 
-      {filteredRegistros.length === 0 && activeTab === 'accesos' && (
+      {filteredRegistros.length === 0 && activeTab === 'accesos' && !isLoading && (
         <div className="no-results">
           <p>No se encontraron registros que coincidan con los criterios de búsqueda.</p>
+        </div>
+      )}
+
+      {filteredIncidentes.length === 0 && activeTab === 'incidentes' && !isLoading && (
+        <div className="no-results">
+          <p>No se encontraron incidentes con los filtros actuales.</p>
+        </div>
+      )}
+
+      {filteredEventos.length === 0 && activeTab === 'eventos' && !isLoading && (
+        <div className="no-results">
+          <p>No se encontraron eventos del sistema con los filtros actuales.</p>
         </div>
       )}
     </div>

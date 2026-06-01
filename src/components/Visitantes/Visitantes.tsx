@@ -9,13 +9,54 @@ export default function Visitantes({}: ComponentProps) {
   const [dni, setDni] = useState('')
   const [visitaA, setVisitaA] = useState('')
   const [feedback, setFeedback] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [actionLoadingId, setActionLoadingId] = useState<number | null>(null)
 
   const [visitantes, setVisitantes] = useState<Visitante[]>([])
   const [extendModalOpen, setExtendModalOpen] = useState(false)
   const [extendingVisitantId, setExtendingVisitantId] = useState<number | null>(null)
   const [horasExtension, setHorasExtension] = useState(2)
 
+  const parseDateTime = (fecha?: unknown, hora?: unknown) => {
+    const fechaStr = String(fecha || '').trim()
+    const horaStr = String(hora || '').trim()
+    if (!fechaStr || !horaStr) {
+      return null
+    }
+    const iso = `${fechaStr}T${horaStr.length === 5 ? `${horaStr}:00` : horaStr}`
+    const dt = new Date(iso)
+    return Number.isNaN(dt.getTime()) ? null : dt
+  }
+
+  const getEstadoYTiempo = (fecha?: unknown, hora?: unknown) => {
+    const inicio = parseDateTime(fecha, hora)
+    if (!inicio) {
+      return {
+        estado: 'Vencido' as const,
+        tiempoRestante: 'Sin hora',
+      }
+    }
+
+    const vencimiento = new Date(inicio.getTime() + 2 * 60 * 60 * 1000)
+    const restanteMs = vencimiento.getTime() - Date.now()
+    if (restanteMs <= 0) {
+      return {
+        estado: 'Vencido' as const,
+        tiempoRestante: '0h 0m',
+      }
+    }
+
+    const horas = Math.floor(restanteMs / (60 * 60 * 1000))
+    const minutos = Math.floor((restanteMs % (60 * 60 * 1000)) / (60 * 1000))
+    return {
+      estado: 'Activo' as const,
+      tiempoRestante: `${horas}h ${minutos}m`,
+    }
+  }
+
   const cargarVisitantes = async () => {
+    setIsLoading(true)
     try {
       const [rows, departamentos] = await Promise.all([
         ApiService.getVisitantes(),
@@ -32,15 +73,15 @@ export default function Visitantes({}: ComponentProps) {
 
       const mapped = rows.map((v) => {
         const fechaVisita = String(v.fecha_visita || '')
-        const hoy = new Date().toISOString().slice(0, 10)
-        const estado: Visitante['estado'] = fechaVisita >= hoy ? 'Activo' : 'Vencido'
+        const horaVisita = String(v.hora_visita || '')
+        const { estado, tiempoRestante } = getEstadoYTiempo(fechaVisita, horaVisita)
         const idDepartamento = Number(v.iddepartamento)
         return {
           id: Number(v.idvisitante),
           nombre: `${String(v.nombre || '')} ${String(v.apellido || '')}`.trim(),
           visitaA: depMap.get(idDepartamento) || `ID ${idDepartamento}`,
           horaEntrada: String(v.hora_visita || '-').slice(0, 5),
-          tiempoRestante: estado === 'Activo' ? 'En curso' : '0 horas',
+          tiempoRestante,
           estado,
           registro: fechaVisita ? new Date(fechaVisita).toLocaleDateString('es-PE') : '-',
         }
@@ -51,6 +92,8 @@ export default function Visitantes({}: ComponentProps) {
     } catch {
       setVisitantes([])
       setFeedback('No se pudieron cargar visitantes desde backend.')
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -71,26 +114,36 @@ export default function Visitantes({}: ComponentProps) {
   )
 
   const handleAutorizarIngreso = () => {
-    if (!nombreCompleto || !dni || !visitaA) {
+    const nombreCompletoLimpio = nombreCompleto.trim()
+    const dniLimpio = dni.trim()
+    const visitaALimpio = visitaA.trim().toUpperCase()
+
+    if (!nombreCompletoLimpio || !dniLimpio || !visitaALimpio) {
       setFeedback('Por favor complete todos los campos requeridos.')
       return
     }
 
+    if (!/^\d{8}$/.test(dniLimpio)) {
+      setFeedback('El DNI debe contener exactamente 8 digitos.')
+      return
+    }
+
     const registrar = async () => {
+      setIsSubmitting(true)
       try {
         const now = new Date()
-        const nombreParts = nombreCompleto.trim().split(/\s+/)
+        const nombreParts = nombreCompletoLimpio.split(/\s+/)
         const nombre = nombreParts.shift() || ''
         const apellido = nombreParts.join(' ') || '-'
 
         await ApiService.createVisitante({
           nombre,
           apellido,
-          dni,
+          dni: dniLimpio,
           motivo: 'Registro rápido desde dashboard',
           fecha_visita: now.toISOString().slice(0, 10),
           hora_visita: now.toTimeString().slice(0, 8),
-          depart_visita: visitaA.trim().toUpperCase(),
+          depart_visita: visitaALimpio,
           acepta_foto: false,
         })
 
@@ -99,8 +152,11 @@ export default function Visitantes({}: ComponentProps) {
         setDni('')
         setVisitaA('')
         await cargarVisitantes()
-      } catch {
-        setFeedback('No se pudo registrar. Verifica que "Visita a" sea un código real de departamento (ej. A-101).')
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Error desconocido al registrar visitante.'
+        setFeedback(`No se pudo registrar: ${message}`)
+      } finally {
+        setIsSubmitting(false)
       }
     }
 
@@ -113,16 +169,59 @@ export default function Visitantes({}: ComponentProps) {
     setExtendModalOpen(true)
   }
 
-  const handleConfirmExtend = () => {
-    if (extendingVisitantId) {
-      setFeedback(`Visita extendida por ${horasExtension} horas.`)
+  const handleConfirmExtend = async () => {
+    if (!extendingVisitantId) {
+      return
+    }
+
+    setActionLoadingId(extendingVisitantId)
+    try {
+      const visitante = await ApiService.getVisitantes()
+      const actual = visitante.find((v) => Number(v.idvisitante) === extendingVisitantId)
+      if (!actual) {
+        setFeedback('No se encontro el visitante seleccionado.')
+        return
+      }
+
+      const inicioActual = parseDateTime(actual.fecha_visita, actual.hora_visita)
+      const base = inicioActual && inicioActual.getTime() > Date.now() ? inicioActual : new Date()
+      const nuevaHora = new Date(base.getTime() + horasExtension * 60 * 60 * 1000)
+
+      await ApiService.updateVisitante(extendingVisitantId, {
+        fecha_visita: nuevaHora.toISOString().slice(0, 10),
+        hora_visita: nuevaHora.toTimeString().slice(0, 8),
+      })
+
+      setFeedback(`Visita extendida por ${horasExtension} horas y guardada en backend.`)
       setExtendModalOpen(false)
       setExtendingVisitantId(null)
+      await cargarVisitantes()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error desconocido al extender visita.'
+      setFeedback(`No se pudo extender la visita: ${message}`)
+    } finally {
+      setActionLoadingId(null)
     }
   }
 
-  const handleFinalizar = (id: number) => {
-    setFeedback(`Finalización de visita (${id}) pendiente de endpoint dedicado en backend.`)
+  const handleFinalizar = async (id: number) => {
+    setActionLoadingId(id)
+    try {
+      await ApiService.finalizarVisitante(id)
+      setFeedback(`Visita ${id} finalizada correctamente.`)
+      await cargarVisitantes()
+      // notify other components (e.g. Historial) to refresh
+      try {
+        window.dispatchEvent(new CustomEvent('visitanteFinalizado', { detail: { id } }))
+      } catch {
+        // ignore if CustomEvent is not supported in some environments
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error desconocido al finalizar visita.'
+      setFeedback(`No se pudo finalizar visita: ${message}`)
+    } finally {
+      setActionLoadingId(null)
+    }
   }
 
   return (
@@ -181,7 +280,7 @@ export default function Visitantes({}: ComponentProps) {
             </div>
             
             <button onClick={handleAutorizarIngreso} className="autorizar-btn">
-              Autorizar Ingreso
+              {isSubmitting ? 'Autorizando...' : 'Autorizar Ingreso'}
             </button>
           </div>
         </div>
@@ -249,6 +348,11 @@ export default function Visitantes({}: ComponentProps) {
             </tr>
           </thead>
           <tbody>
+            {isLoading && (
+              <tr>
+                <td colSpan={7}>Cargando visitantes...</td>
+              </tr>
+            )}
             {filteredVisitantes.map((visitante) => (
               <tr key={visitante.id}>
                 <td className="visitante-name">{visitante.nombre}</td>
@@ -266,14 +370,16 @@ export default function Visitantes({}: ComponentProps) {
                     <button 
                       onClick={() => handleExtender(visitante.id)}
                       className="action-btn extend-btn"
+                      disabled={actionLoadingId === visitante.id}
                     >
-                      Extender
+                      {actionLoadingId === visitante.id ? 'Procesando...' : 'Extender'}
                     </button>
                     <button 
-                      onClick={() => handleFinalizar(visitante.id)}
+                      onClick={() => void handleFinalizar(visitante.id)}
                       className="action-btn finalize-btn"
+                      disabled={actionLoadingId === visitante.id}
                     >
-                      Finalizar
+                      {actionLoadingId === visitante.id ? 'Procesando...' : 'Finalizar'}
                     </button>
                   </div>
                 </td>
@@ -328,9 +434,12 @@ export default function Visitantes({}: ComponentProps) {
               </button>
               <button 
                 className="btn-confirm"
-                onClick={handleConfirmExtend}
+                onClick={() => void handleConfirmExtend()}
+                disabled={extendingVisitantId !== null && actionLoadingId === extendingVisitantId}
               >
-                Extender {horasExtension}h
+                {extendingVisitantId !== null && actionLoadingId === extendingVisitantId
+                  ? 'Guardando...'
+                  : `Extender ${horasExtension}h`}
               </button>
             </div>
           </div>

@@ -3,6 +3,22 @@ import './Residentes.css'
 import type { Residente, ComponentProps } from '../../types'
 import ApiService from '../../services/api'
 
+interface DepartamentoOption {
+  id: number
+  codigo: string
+}
+
+type ResidenteRow = Residente & {
+  idDepartamento: number
+}
+
+type NewResidenteForm = {
+  nombreCompleto: string
+  dni: string
+  correo: string
+  departamento: string
+}
+
 export default function Residentes({}: ComponentProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [estadoFilter, setEstadoFilter] = useState('Todos los estados')
@@ -10,47 +26,101 @@ export default function Residentes({}: ComponentProps) {
   const [selectedResidenteId, setSelectedResidenteId] = useState<number | null>(null)
   const [editingResidenteId, setEditingResidenteId] = useState<number | null>(null)
   const [feedback, setFeedback] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
 
-  const [residentes, setResidentes] = useState<Residente[]>([])
+  const [departamentos, setDepartamentos] = useState<DepartamentoOption[]>([])
+
+  const [newResidente, setNewResidente] = useState<NewResidenteForm>({
+    nombreCompleto: '',
+    dni: '',
+    correo: '',
+    departamento: '',
+  })
+
+  const [residentes, setResidentes] = useState<ResidenteRow[]>([])
+
+  const resetNewResidente = () => {
+    setNewResidente({
+      nombreCompleto: '',
+      dni: '',
+      correo: '',
+      departamento: '',
+    })
+  }
+
+  const splitNombreCompleto = (fullName: string) => {
+    const partes = fullName.trim().split(/\s+/).filter(Boolean)
+    const nombre = partes.shift() || ''
+    const apellido = partes.join(' ') || '-'
+    return { nombre, apellido }
+  }
+
+  const findDepartamentoIdByCode = (codigo: string) => {
+    const objetivo = codigo.trim().toUpperCase()
+    const match = departamentos.find((dep) => dep.codigo.toUpperCase() === objetivo)
+    return match ? match.id : null
+  }
+
+  const cargarResidentes = async () => {
+    setIsLoading(true)
+    try {
+      const [usuarios, departamentosRows] = await Promise.all([
+        ApiService.getUsuarios(),
+        ApiService.getDepartamentos(),
+      ])
+
+      const options = departamentosRows
+        .map((dep) => {
+          const id = Number(dep.iddepartamento)
+          if (Number.isNaN(id)) {
+            return null
+          }
+          return {
+            id,
+            codigo: String(dep.codigo || `ID ${id}`),
+          }
+        })
+        .filter((dep): dep is DepartamentoOption => dep !== null)
+
+      const depMap = new Map<number, string>()
+      options.forEach((dep) => depMap.set(dep.id, dep.codigo))
+
+      const mapped = usuarios.reduce<ResidenteRow[]>((acc, usuario) => {
+        const id = Number(usuario.idusuario)
+        const idDepartamento = Number(usuario.iddepartamento)
+        if (Number.isNaN(id) || Number.isNaN(idDepartamento)) {
+          return acc
+        }
+
+        acc.push({
+          id,
+          idDepartamento,
+          nombre: `${String(usuario.nombre || '')} ${String(usuario.apellido || '')}`.trim(),
+          departamento: depMap.get(idDepartamento) || `ID ${idDepartamento}`,
+          dni: String(usuario.dni || ''),
+          telefono: String(usuario.correo || ''),
+          estado: 'Activo',
+          registro: '-',
+        })
+        return acc
+      }, [])
+
+      setDepartamentos(options)
+      setResidentes(mapped)
+      setFeedback(null)
+    } catch {
+      setFeedback('No se pudieron cargar residentes desde el backend.')
+      setResidentes([])
+      setDepartamentos([])
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const cargarResidentes = async () => {
-      try {
-        const [usuarios, departamentos] = await Promise.all([
-          ApiService.getUsuarios(),
-          ApiService.getDepartamentos(),
-        ])
-
-        const depMap = new Map<number, string>()
-        departamentos.forEach((dep) => {
-          const id = Number(dep.iddepartamento)
-          if (!Number.isNaN(id)) {
-            depMap.set(id, String(dep.codigo || `ID ${id}`))
-          }
-        })
-
-        const mapped = usuarios.map((usuario) => {
-          const idDepartamento = Number(usuario.iddepartamento)
-          return {
-            id: Number(usuario.idusuario),
-            nombre: `${String(usuario.nombre || '')} ${String(usuario.apellido || '')}`.trim(),
-            departamento: depMap.get(idDepartamento) || `ID ${idDepartamento}`,
-            dni: String(usuario.dni || ''),
-            telefono: String(usuario.correo || '-'),
-            estado: 'Activo' as const,
-            registro: '-',
-          }
-        })
-
-        setResidentes(mapped)
-        setFeedback(null)
-      } catch {
-        setFeedback('No se pudieron cargar residentes desde el backend.')
-        setResidentes([])
-      }
-    }
-
-    cargarResidentes()
+    void cargarResidentes()
   }, [])
 
   const filteredResidentes = residentes.filter(residente => {
@@ -76,7 +146,8 @@ export default function Residentes({}: ComponentProps) {
   }
 
   const handleNewResident = () => {
-    setFeedback('Para crear residentes desde Dashboard falta endpoint/formulario de alta de usuarios en backend.')
+    setIsCreateOpen((prev) => !prev)
+    setFeedback(null)
   }
 
   const handleFieldChange = (id: number, field: keyof Residente, value: string) => {
@@ -87,9 +158,96 @@ export default function Residentes({}: ComponentProps) {
     )
   }
 
-  const handleSave = () => {
-    setEditingResidenteId(null)
-    setFeedback('Cambios locales aplicados en la UI. Para persistir en backend falta endpoint de actualización de residentes en este módulo.')
+  const handleCreateResident = async () => {
+    const nombreCompleto = newResidente.nombreCompleto.trim()
+    const dni = newResidente.dni.trim()
+    const correo = newResidente.correo.trim()
+    const codigoDepartamento = newResidente.departamento.trim().toUpperCase()
+
+    if (!nombreCompleto || !dni || !codigoDepartamento) {
+      setFeedback('Nombre completo, DNI y departamento son obligatorios.')
+      return
+    }
+
+    if (!/^\d{8}$/.test(dni)) {
+      setFeedback('El DNI debe contener exactamente 8 digitos.')
+      return
+    }
+
+    const idDepartamento = findDepartamentoIdByCode(codigoDepartamento)
+    if (!idDepartamento) {
+      setFeedback('El codigo de departamento no existe. Usa uno valido, por ejemplo A-101.')
+      return
+    }
+
+    const { nombre, apellido } = splitNombreCompleto(nombreCompleto)
+    if (!nombre) {
+      setFeedback('Ingresa un nombre valido para el residente.')
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      await ApiService.createUsuario({
+        nombre,
+        apellido,
+        dni,
+        correo: correo || null,
+        iddepartamento: idDepartamento,
+      })
+
+      setFeedback('Residente creado y guardado en backend.')
+      setIsCreateOpen(false)
+      resetNewResidente()
+      await cargarResidentes()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error desconocido al crear residente.'
+      setFeedback(`No se pudo crear residente: ${message}`)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleSave = async (id: number) => {
+    const residente = residentes.find((item) => item.id === id)
+    if (!residente) {
+      setFeedback('No se encontro el residente a guardar.')
+      return
+    }
+
+    const nombreCompleto = residente.nombre.trim()
+    const dni = residente.dni.trim()
+    if (!nombreCompleto || !/^\d{8}$/.test(dni)) {
+      setFeedback('Verifica nombre y DNI (8 digitos) antes de guardar.')
+      return
+    }
+
+    const idDepartamento = findDepartamentoIdByCode(residente.departamento)
+    if (!idDepartamento) {
+      setFeedback('El departamento editado no existe. Usa un codigo valido.')
+      return
+    }
+
+    const { nombre, apellido } = splitNombreCompleto(nombreCompleto)
+    setIsSaving(true)
+    try {
+      await ApiService.updateUsuario(id, {
+        nombre,
+        apellido,
+        dni,
+        correo: residente.telefono || null,
+        iddepartamento: idDepartamento,
+      })
+
+      setEditingResidenteId(null)
+      setFeedback('Cambios guardados en backend correctamente.')
+      await cargarResidentes()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error desconocido al guardar cambios.'
+      setFeedback(`No se pudieron guardar cambios: ${message}`)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const selectedResidente = residentes.find((r) => r.id === selectedResidenteId)
@@ -143,9 +301,48 @@ export default function Residentes({}: ComponentProps) {
         </div>
 
         <button onClick={handleNewResident} className="new-resident-btn">
-          ➕ Nuevo Residente
+          {isCreateOpen ? '✖ Cerrar Alta' : '➕ Nuevo Residente'}
         </button>
       </div>
+
+      {isCreateOpen && (
+        <div className="no-results" style={{ marginBottom: '1rem' }}>
+          <p><strong>Alta de residente</strong></p>
+          <div style={{ display: 'grid', gap: '0.5rem', marginTop: '0.75rem' }}>
+            <input
+              className="search-input"
+              placeholder="Nombre completo"
+              value={newResidente.nombreCompleto}
+              onChange={(e) => setNewResidente((prev) => ({ ...prev, nombreCompleto: e.target.value }))}
+            />
+            <input
+              className="search-input"
+              placeholder="DNI (8 digitos)"
+              value={newResidente.dni}
+              onChange={(e) => setNewResidente((prev) => ({ ...prev, dni: e.target.value }))}
+            />
+            <input
+              className="search-input"
+              placeholder="Correo"
+              value={newResidente.correo}
+              onChange={(e) => setNewResidente((prev) => ({ ...prev, correo: e.target.value }))}
+            />
+            <input
+              className="search-input"
+              placeholder="Codigo de departamento (ej. A-101)"
+              value={newResidente.departamento}
+              onChange={(e) => setNewResidente((prev) => ({ ...prev, departamento: e.target.value.toUpperCase() }))}
+            />
+            <button
+              className="new-resident-btn"
+              onClick={() => void handleCreateResident()}
+              disabled={isSaving}
+            >
+              {isSaving ? 'Guardando...' : 'Guardar Residente'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div className="residentes-table-container">
@@ -155,13 +352,18 @@ export default function Residentes({}: ComponentProps) {
               <th>RESIDENTES</th>
               <th>DEPARTAMENTO</th>
               <th>DNI</th>
-              <th>TELÉFONO</th>
+              <th>CORREO</th>
               <th>ESTADO</th>
               <th>REGISTRO</th>
               <th>ACCIONES</th>
             </tr>
           </thead>
           <tbody>
+            {isLoading && (
+              <tr>
+                <td colSpan={7}>Cargando residentes...</td>
+              </tr>
+            )}
             {filteredResidentes.map((residente) => (
               <tr key={residente.id}>
                 <td className="resident-name">
@@ -215,11 +417,12 @@ export default function Residentes({}: ComponentProps) {
                     </button>
                     {editingResidenteId === residente.id && (
                       <button 
-                        onClick={handleSave}
+                        onClick={() => void handleSave(residente.id)}
                         className="action-btn extend-btn"
                         title="Guardar"
+                        disabled={isSaving}
                       >
-                        💾 Guardar
+                        {isSaving ? '⏳ Guardando' : '💾 Guardar'}
                       </button>
                     )}
                     <button 
@@ -246,7 +449,7 @@ export default function Residentes({}: ComponentProps) {
       {selectedResidente && (
         <div className="no-results" style={{ marginTop: '1rem' }}>
           <p>
-            Residente seleccionado: {selectedResidente.nombre} | DNI: {selectedResidente.dni} | Depto: {selectedResidente.departamento}
+            Residente seleccionado: {selectedResidente.nombre} | DNI: {selectedResidente.dni} | Depto: {selectedResidente.departamento} | Correo: {selectedResidente.telefono || '-'}
           </p>
         </div>
       )}

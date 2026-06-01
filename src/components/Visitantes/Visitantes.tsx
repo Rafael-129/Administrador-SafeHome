@@ -210,6 +210,12 @@ export default function Visitantes({}: ComponentProps) {
       await ApiService.finalizarVisitante(id)
       setFeedback(`Visita ${id} finalizada correctamente.`)
       await cargarVisitantes()
+      // notify other components (e.g. Historial) to refresh
+      try {
+        window.dispatchEvent(new CustomEvent('visitanteFinalizado', { detail: { id } }))
+      } catch {
+        // ignore if CustomEvent is not supported in some environments
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error desconocido al finalizar visita.'
       setFeedback(`No se pudo finalizar visita: ${message}`)

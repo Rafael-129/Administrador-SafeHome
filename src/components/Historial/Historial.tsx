@@ -157,6 +157,14 @@ export default function Historial({}: ComponentProps) {
     void cargarHistorial()
   }, [])
 
+  useEffect(() => {
+    const onVisitanteFinalizado = (_e: Event) => {
+      void cargarHistorial()
+    }
+    window.addEventListener('visitanteFinalizado', onVisitanteFinalizado as EventListener)
+    return () => window.removeEventListener('visitanteFinalizado', onVisitanteFinalizado as EventListener)
+  }, [])
+
   const filteredRegistros = registrosAcceso.filter(registro => {
     const matchesSearch = registro.persona.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          registro.accion.toLowerCase().includes(searchTerm.toLowerCase()) ||

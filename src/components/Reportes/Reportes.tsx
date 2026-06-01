@@ -76,6 +76,8 @@ export default function Reportes({}: ComponentProps) {
     tiempoPromedioReconocimiento: 'N/A'
   })
 
+  const [chartData, setChartData] = useState<number[]>([])
+
   const [historialReportes, setHistorialReportes] = useState<ReporteHistorial[]>([
     {
       id: 1,
@@ -125,6 +127,29 @@ export default function Reportes({}: ComponentProps) {
     }
 
     cargarMetricas()
+    // also load last 7 days data for chart
+    const cargarChart = async () => {
+      try {
+        const rows = await ApiService.getHistorial()
+        const counts: Record<string, number> = {}
+        const today = new Date()
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date(today)
+          d.setDate(d.getDate() - i)
+          const key = d.toISOString().slice(0, 10)
+          counts[key] = 0
+        }
+        rows.forEach((r: any) => {
+          const fechaStr = String(r.fecha_entrada || r.fecha || '')
+          const key = fechaStr.includes('T') ? fechaStr.slice(0, 10) : fechaStr
+          if (counts[key] != null) counts[key] += 1
+        })
+        setChartData(Object.keys(counts).map((k) => counts[k]))
+      } catch {
+        setChartData([])
+      }
+    }
+    void cargarChart()
   }, [])
 
   const tiposDeData = [
@@ -149,15 +174,27 @@ export default function Reportes({}: ComponentProps) {
   }
 
   const descargarArchivo = (nombre: string, contenido: string, mime = 'text/plain;charset=utf-8') => {
-    const blob = new Blob([contenido], { type: mime })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = nombre
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    try {
+      const blob = new Blob([contenido], { type: mime })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = nombre
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      return true
+    } catch (e) {
+      // fallback: open in new tab as data URI
+      try {
+        const dataUrl = `data:${mime},${encodeURIComponent(contenido)}`
+        window.open(dataUrl, '_blank')
+        return true
+      } catch {
+        return false
+      }
+    }
   }
 
   const agregarHistorial = (nombre: string) => {
@@ -215,9 +252,13 @@ export default function Reportes({}: ComponentProps) {
           .map((cols) => cols.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
           .join('\n')
 
-        descargarArchivo(`${tipoReporte.replaceAll(' ', '_').toLowerCase()}.csv`, csv, 'text/csv;charset=utf-8')
-        agregarHistorial(tipoReporte)
-        setFeedback(`${tipoReporte} generado y descargado (CSV).`)
+        const ok = descargarArchivo(`${tipoReporte.replaceAll(' ', '_').toLowerCase()}.csv`, csv, 'text/csv;charset=utf-8')
+        if (ok) {
+          agregarHistorial(tipoReporte)
+          setFeedback(`${tipoReporte} generado y descargado (CSV).`)
+        } else {
+          setFeedback('El navegador bloqueó la descarga. Abriendo en nueva pestaña...')
+        }
       } catch (e) {
         setFeedback('Error generando reporte: ' + (e instanceof Error ? e.message : String(e)))
       }
@@ -264,10 +305,13 @@ export default function Reportes({}: ComponentProps) {
           .map((cols) => cols.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
           .join('\n')
 
-        const extension = formatoExportacion.includes('CSV') ? 'csv' : 'csv'
-        descargarArchivo(`${tituloReporte.replaceAll(' ', '_').toLowerCase()}.${extension}`, csv, 'text/csv;charset=utf-8')
-        agregarHistorial(tituloReporte)
-        setFeedback('Reporte personalizado generado y descargado (CSV).')
+        const ok = descargarArchivo(`${tituloReporte.replaceAll(' ', '_').toLowerCase()}.csv`, csv, 'text/csv;charset=utf-8')
+        if (ok) {
+          agregarHistorial(tituloReporte)
+          setFeedback('Reporte personalizado generado y descargado (CSV).')
+        } else {
+          setFeedback('El navegador bloqueó la descarga. Abriendo en nueva pestaña...')
+        }
       } catch (e) {
         setFeedback('Error generando reporte personalizado: ' + (e instanceof Error ? e.message : String(e)))
       }
@@ -375,11 +419,34 @@ export default function Reportes({}: ComponentProps) {
         <div className="grafico-section">
           <h4>Flujo de Accesos - Últimos 7 Días</h4>
           <div className="grafico-placeholder">
-            <div className="grafico-icon">📊</div>
-            <div>
-              <p>Gráfico de accesos por día</p>
-              <span>Datos actualizándose...</span>
-            </div>
+              <div className="grafico-icon">📊</div>
+              <div>
+                <p>Gráfico de accesos por día</p>
+              </div>
+              <div style={{ width: '100%', height: 140 }}>
+                {chartData && chartData.length === 7 ? (
+                  <svg viewBox="0 0 700 140" style={{ width: '100%', height: 140 }}>
+                    {(() => {
+                      const max = Math.max(...chartData, 1)
+                      const stepX = 700 / 7
+                      return chartData.map((v, i) => {
+                        const x = i * stepX + 10
+                        const h = (v / max) * 100
+                        const y = 120 - h
+                        return (
+                          <g key={i}>
+                            <rect x={x} y={y} width={stepX - 20} height={h} fill="#3b82f6" rx={4} />
+                            <text x={x + (stepX - 20) / 2} y={y - 6} fontSize={12} textAnchor="middle" fill="#111">{v}</text>
+                            <text x={x + (stepX - 20) / 2} y={135} fontSize={11} textAnchor="middle" fill="#666">{new Date(Date.now() - (6 - i) * 24 * 60 * 60 * 1000).toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })}</text>
+                          </g>
+                        )
+                      })
+                    })()}
+                  </svg>
+                ) : (
+                  <div style={{ padding: '1rem', color: '#666' }}>Datos insuficientes para graficar</div>
+                )}
+              </div>
           </div>
         </div>
       </div>
